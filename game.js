@@ -36,10 +36,10 @@ const fuelDrainPerSec = 0.008; // drain
 const motorTorque = 0.0019;    // Rad-Drehmoment
 const brakeDamp   = 0.10;      // "Bremse" durch Drehdämpfung
 const maxAngular  = 0.35;      // max wheel angular velocity
-const terrainStep = 40;        // px Abstand zwischen Punkten
+const terrainStep = 28;        // px Abstand zwischen Punkten
 const terrainAmp  = 120;       // Hügelhöhe
 const terrainBase = 320;       // Baseline
-const segmentThickness = 18;   // Kollisions-"Dicke"
+const segmentThickness = 26;   // Kollisions-"Dicke"
 
 // ====== Kamera ======
 const camera = {
