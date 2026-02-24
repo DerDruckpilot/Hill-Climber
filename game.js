@@ -1,9 +1,11 @@
 
-/* Mini Hill Climb – BUILD B002 */
+/* Mini Hill Climb – BUILD B004
+   - Main Menu + Game Over overlay
+   - Driver head attached to chassis
+   - Game Over when head collides with terrain/obstacles
+*/
 
-const {
-  Engine, World, Bodies, Body, Constraint, Vector
-} = Matter;
+const { Engine, World, Bodies, Body, Constraint, Vector, Events } = Matter;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d", { alpha: false });
@@ -11,6 +13,15 @@ const ctx = canvas.getContext("2d", { alpha: false });
 const uiSpeed = document.getElementById("speed");
 const uiFuel  = document.getElementById("fuel");
 const uiDist  = document.getElementById("dist");
+
+const menuEl = document.getElementById("menu");
+const gameOverEl = document.getElementById("gameover");
+const goReasonEl = document.getElementById("goReason");
+const btnStart = document.getElementById("btnStart");
+const btnBack  = document.getElementById("btnBack");
+
+function show(el){ el.classList.add("is-visible"); }
+function hide(el){ el.classList.remove("is-visible"); }
 
 function resize() {
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -20,6 +31,9 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
+
+const STATE = { MENU:"menu", PLAY:"play", GAMEOVER:"gameover" };
+let state = STATE.MENU;
 
 const engine = Engine.create();
 engine.gravity.y = 1.2;
@@ -47,10 +61,8 @@ function bindHold(btn, prop) {
   btn.addEventListener("pointercancel", up);
   btn.addEventListener("pointerleave", up);
 }
-
 bindHold(document.getElementById("gas"), "gas");
 bindHold(document.getElementById("brake"), "brake");
-
 document.addEventListener("touchmove", (e)=>e.preventDefault(), { passive:false });
 
 let terrainPoints = [];
@@ -84,7 +96,8 @@ function addTerrainSegment(p1, p2){
 
   const body = Bodies.rectangle(mid.x, mid.y, len+6, segmentThickness+14, {
     isStatic: true,
-    friction: 1.0
+    friction: 1.0,
+    label: "GROUND"
   });
   Body.setAngle(body, ang);
 
@@ -107,7 +120,17 @@ function ensureTerrainUntil(xMax){
     terrainPoints.push(np);
     addTerrainSegment(last, np);
   }
+
+  const cutoff = camera.x - 1200;
+  while (terrainPoints.length > 6 && terrainPoints[1].x < cutoff){
+    terrainPoints.shift();
+    const b = terrainBodies.shift();
+    if (b) World.remove(world, b);
+  }
 }
+
+let car = null;
+let distanceStartX = 0;
 
 function createCar(x){
   const groundY = heightAtX(x);
@@ -115,16 +138,19 @@ function createCar(x){
 
   const chassis = Bodies.rectangle(x, spawnY, 120, 28, {
     density: 0.003,
-    friction: 0.6
+    friction: 0.6,
+    label: "CHASSIS"
   });
 
   const wheelA = Bodies.circle(x - 42, spawnY + 24, 20, {
     density: 0.002,
-    friction: 1.2
+    friction: 1.2,
+    label: "WHEEL"
   });
   const wheelB = Bodies.circle(x + 42, spawnY + 24, 20, {
     density: 0.002,
-    friction: 1.2
+    friction: 1.2,
+    label: "WHEEL"
   });
 
   const suspA = Constraint.create({
@@ -144,37 +170,121 @@ function createCar(x){
     damping: 0.15
   });
 
-  World.add(world, [chassis, wheelA, wheelB, suspA, suspB]);
-  return { chassis, wheelA, wheelB, suspA, suspB };
+  const head = Bodies.circle(x - 18, spawnY - 26, 12, {
+    isSensor: true,
+    label: "HEAD"
+  });
+  const neck = Constraint.create({
+    bodyA: chassis,
+    pointA: { x:-18, y:-18 },
+    bodyB: head,
+    length: 18,
+    stiffness: 0.9,
+    damping: 0.2
+  });
+
+  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, head, neck]);
+
+  return { chassis, wheelA, wheelB, suspA, suspB, head, neck };
 }
 
-ensureTerrainUntil(2000);
-let car = createCar(120);
-let distanceStartX = car.chassis.position.x;
+function removeCar(){
+  if (!car) return;
+  World.remove(world, [car.chassis, car.wheelA, car.wheelB, car.suspA, car.suspB, car.head, car.neck]);
+  car = null;
+}
 
-function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+Events.on(engine, "collisionStart", (evt) => {
+  if (state !== STATE.PLAY) return;
+  for (const pair of evt.pairs){
+    const a = pair.bodyA;
+    const b = pair.bodyB;
 
-function step(){
+    const headHitGround = (a.label === "HEAD" && b.label === "GROUND") || (b.label === "HEAD" && a.label === "GROUND");
+    const headHitAnyStatic = (a.label === "HEAD" && b.isStatic) || (b.label === "HEAD" && a.isStatic);
+
+    if (headHitGround || headHitAnyStatic){
+      triggerGameOver("Kopf berührt");
+      return;
+    }
+  }
+});
+
+function triggerGameOver(reason){
+  if (state !== STATE.PLAY) return;
+  state = STATE.GAMEOVER;
+  input.gas = false; input.brake = false;
+  goReasonEl.textContent = reason || "Game Over";
+  show(gameOverEl);
+}
+
+function resetWorld(){
+  World.clear(world, false);
+
+  terrainPoints = [];
+  terrainBodies = [];
+
+  fuel = 1.0;
+
+  ensureTerrainUntil(2000);
+  car = createCar(120);
+  distanceStartX = car.chassis.position.x;
+
   camera.x = car.chassis.position.x - window.innerWidth * 0.25;
   camera.y = car.chassis.position.y - window.innerHeight * 0.55;
+}
 
-  ensureTerrainUntil(car.chassis.position.x + 1600);
+function startGame(){
+  hide(menuEl);
+  hide(gameOverEl);
+  state = STATE.PLAY;
+  resetWorld();
+}
 
-  if (fuel > 0){
-    fuel = Math.max(0, fuel - fuelDrainPerSec / 60);
+function backToMenu(){
+  state = STATE.MENU;
+  input.gas = false; input.brake = false;
+  show(menuEl);
+  hide(gameOverEl);
+  removeCar();
+}
+
+btnStart.addEventListener("click", (e) => { e.preventDefault(); startGame(); });
+btnBack.addEventListener("click", (e) => { e.preventDefault(); backToMenu(); });
+
+show(menuEl);
+
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+let lastTs = performance.now();
+
+function step(ts){
+  const dt = Math.max(0, Math.min(0.033, (ts - lastTs)/1000));
+  lastTs = ts;
+
+  if (state === STATE.PLAY && car){
+    camera.x = car.chassis.position.x - window.innerWidth * 0.25;
+    camera.y = car.chassis.position.y - window.innerHeight * 0.55;
+
+    ensureTerrainUntil(car.chassis.position.x + 1600);
+
+    if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
+
+    if (fuel > 0 && input.gas){
+      Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
+      Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
+    }
+    if (input.brake){
+      Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
+      Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
+    }
+
+    Engine.update(engine, 1000/60);
+
+    if (fuel <= 0) triggerGameOver("Kein Fuel");
+  } else {
+    Engine.update(engine, 1000/60);
   }
 
-  if (fuel > 0 && input.gas){
-    Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
-    Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
-  }
-
-  if (input.brake){
-    Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
-    Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
-  }
-
-  Engine.update(engine, 1000/60);
   render();
   updateHUD();
   requestAnimationFrame(step);
@@ -188,7 +298,8 @@ function render(){
   ctx.fillStyle = "#0b0f1a";
   ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
 
-  ctx.strokeStyle = "rgba(255,255,255,0.4)";
+  ctx.strokeStyle = "rgba(255,255,255,0.40)";
+  ctx.lineWidth = 3;
   ctx.beginPath();
   for (let i=0;i<terrainPoints.length;i++){
     const s = worldToScreen(terrainPoints[i]);
@@ -197,9 +308,12 @@ function render(){
   }
   ctx.stroke();
 
+  if (!car) return;
+
   drawBodyRect(car.chassis, 120, 28);
   drawWheel(car.wheelA, 20);
   drawWheel(car.wheelB, 20);
+  drawHead(car.head, 12);
 }
 
 function drawBodyRect(body, w, h){
@@ -221,16 +335,56 @@ function drawWheel(body, r){
   ctx.arc(0,0,r,0,Math.PI*2);
   ctx.fillStyle = "#e9eefc";
   ctx.fill();
+
+  ctx.strokeStyle = "rgba(0,0,0,0.20)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.lineTo(r,0);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawHead(body, r){
+  const p = worldToScreen(body.position);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(body.angle);
+  ctx.beginPath();
+  ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.fillStyle = "rgba(233,238,252,0.92)";
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.arc(2,-2,r*0.55, -0.2, Math.PI*1.1);
+  ctx.fill();
+
   ctx.restore();
 }
 
 function updateHUD(){
+  if (!car || state !== STATE.PLAY){
+    uiSpeed.textContent = `0 km/h`;
+    uiFuel.textContent = `Fuel: ${Math.round(fuel*100)}%`;
+    uiDist.textContent = `0 m`;
+    return;
+  }
+
   const vx = car.chassis.velocity.x;
   const kmh = Math.round(Math.abs(vx) * 3.6 * 2.2);
   uiSpeed.textContent = `${kmh} km/h`;
   uiFuel.textContent = `Fuel: ${Math.round(fuel*100)}%`;
+
   const dist = Math.max(0, car.chassis.position.x - distanceStartX);
   uiDist.textContent = `${Math.round(dist/10)} m`;
 }
+
+["btnStart","btnBack","gas","brake"].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+});
 
 requestAnimationFrame(step);
