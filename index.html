@@ -13,7 +13,7 @@
 
 <body>
 
-  <div id="build-badge">BUILD B003</div>
+  <div id="build-badge">BUILD B004</div>
 
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
@@ -26,6 +26,25 @@
   <div id="controls">
     <button id="brake" aria-label="Bremse">⟲</button>
     <button id="gas" aria-label="Gas">⟲</button>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü">
+    <div class="panel">
+      <div class="title">Mini Hill Climb</div>
+      <div class="subtitle">Tippe auf Start</div>
+      <button id="btnStart" class="primary">Start</button>
+      <div class="hint">Gas: rechts · Rückwärts: links</div>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over">
+    <div class="panel">
+      <div class="title">Game Over</div>
+      <div class="subtitle" id="goReason">Kopf berührt</div>
+      <button id="btnBack" class="primary">Zurück zum Menü</button>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
