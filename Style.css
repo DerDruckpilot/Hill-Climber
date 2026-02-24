@@ -1,1 +1,67 @@
+:root{
+  --bg:#0b0f1a;
+  --fg:#e9eefc;
+  --chip: rgba(255,255,255,0.10);
+  --chip2: rgba(0,0,0,0.25);
+}
 
+*{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+html,body{ margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; }
+
+#c{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  touch-action:none; /* wichtig: verhindert iOS Gesten auf Canvas */
+}
+
+#hud{
+  position:fixed;
+  top: calc(env(safe-area-inset-top) + 10px);
+  left: 10px;
+  display:flex;
+  gap:8px;
+  z-index:10;
+  pointer-events:none;
+}
+
+.chip{
+  padding:8px 10px;
+  border-radius:12px;
+  background:var(--chip);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px var(--chip2);
+  font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+#controls{
+  position:fixed;
+  left:0; right:0;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  display:flex;
+  justify-content:space-between;
+  padding: 0 12px;
+  z-index:10;
+}
+
+#controls button{
+  width: 44vw;
+  max-width: 320px;
+  height: 70px;
+  border:0;
+  border-radius:18px;
+  background: rgba(255,255,255,0.12);
+  color: var(--fg);
+  font: 800 20px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  touch-action:none;
+}
+
+#controls button:active{
+  transform: scale(0.98);
+  background: rgba(255,255,255,0.18);
+}
+
+#brake{ text-align:left; padding-left:18px; }
+#gas{ text-align:right; padding-right:18px; }
