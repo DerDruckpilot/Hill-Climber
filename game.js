@@ -1,11 +1,12 @@
 
-/* Mini Hill Climb – BUILD B004
-   - Main Menu + Game Over overlay
-   - Driver head attached to chassis
-   - Game Over when head collides with terrain/obstacles
+/* Mini Hill Climb – BUILD B005
+   - Driver torso + head (stiffer, correct placement)
+   - Reliable restart terrain generation
+   - Air control (tilt with gas/brake when airborne)
+   - Game over if head touches ground/static
 */
 
-const { Engine, World, Bodies, Body, Constraint, Vector, Events } = Matter;
+const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d", { alpha: false });
@@ -39,10 +40,15 @@ const engine = Engine.create();
 engine.gravity.y = 1.2;
 const world = engine.world;
 
+// -------- Params --------
 let fuel = 1.0;
 const fuelDrainPerSec = 0.008;
+
 const motorTorque = 0.0025;
 const maxAngular  = 0.45;
+
+// Air control torque on chassis when airborne
+const airTorque = 0.0035;
 
 const terrainStep = 28;
 const terrainAmp  = 120;
@@ -65,6 +71,7 @@ bindHold(document.getElementById("gas"), "gas");
 bindHold(document.getElementById("brake"), "brake");
 document.addEventListener("touchmove", (e)=>e.preventDefault(), { passive:false });
 
+// -------- Terrain --------
 let terrainPoints = [];
 let terrainBodies = [];
 let seed = 1337;
@@ -105,7 +112,7 @@ function addTerrainSegment(p1, p2){
   World.add(world, body);
 }
 
-function ensureTerrainUntil(xMax){
+function ensureTerrainUntil(xMax, doCleanup = true){
   if (terrainPoints.length === 0){
     terrainPoints.push({ x:-400, y: heightAtX(-400) });
     terrainPoints.push({ x:0, y: heightAtX(0) });
@@ -121,6 +128,8 @@ function ensureTerrainUntil(xMax){
     addTerrainSegment(last, np);
   }
 
+  if (!doCleanup) return;
+
   const cutoff = camera.x - 1200;
   while (terrainPoints.length > 6 && terrainPoints[1].x < cutoff){
     terrainPoints.shift();
@@ -129,8 +138,12 @@ function ensureTerrainUntil(xMax){
   }
 }
 
+// -------- Car + Driver --------
 let car = null;
 let distanceStartX = 0;
+
+// Wheel-ground contact tracking for air control
+let wheelGroundContacts = 0;
 
 function createCar(x){
   const groundY = heightAtX(x);
@@ -170,42 +183,88 @@ function createCar(x){
     damping: 0.15
   });
 
-  const head = Bodies.circle(x - 18, spawnY - 26, 12, {
+  // Driver torso protruding from chassis
+  const torso = Bodies.rectangle(x - 18, spawnY - 30, 18, 44, {
+    density: 0.001,
+    friction: 0.2,
+    label: "TORSO"
+  });
+
+  // Rigid-ish mount torso to chassis
+  const torsoMount = Constraint.create({
+    bodyA: chassis,
+    pointA: { x:-18, y:-14 },
+    bodyB: torso,
+    pointB: { x:0, y: 18 },
+    length: 2,
+    stiffness: 1.0,
+    damping: 0.35
+  });
+
+  // Driver head on top of torso (sensor for game over)
+  const head = Bodies.circle(x - 18, spawnY - 62, 12, {
     isSensor: true,
     label: "HEAD"
   });
+
   const neck = Constraint.create({
-    bodyA: chassis,
-    pointA: { x:-18, y:-18 },
+    bodyA: torso,
+    pointA: { x:0, y:-22 },
     bodyB: head,
-    length: 18,
-    stiffness: 0.9,
-    damping: 0.2
+    pointB: { x:0, y: 0 },
+    length: 1,
+    stiffness: 1.0,
+    damping: 0.45
   });
 
-  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, head, neck]);
+  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck]);
 
-  return { chassis, wheelA, wheelB, suspA, suspB, head, neck };
+  return { chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck };
 }
 
 function removeCar(){
   if (!car) return;
-  World.remove(world, [car.chassis, car.wheelA, car.wheelB, car.suspA, car.suspB, car.head, car.neck]);
+  World.remove(world, [car.chassis, car.wheelA, car.wheelB, car.suspA, car.suspB, car.torso, car.torsoMount, car.head, car.neck]);
   car = null;
 }
 
+// -------- Collision handling --------
+function isWheel(body){ return body && body.label === "WHEEL"; }
+function isGround(body){ return body && body.label === "GROUND"; }
+function isHead(body){ return body && body.label === "HEAD"; }
+
 Events.on(engine, "collisionStart", (evt) => {
-  if (state !== STATE.PLAY) return;
+  if (!car) return;
+
   for (const pair of evt.pairs){
     const a = pair.bodyA;
     const b = pair.bodyB;
 
-    const headHitGround = (a.label === "HEAD" && b.label === "GROUND") || (b.label === "HEAD" && a.label === "GROUND");
-    const headHitAnyStatic = (a.label === "HEAD" && b.isStatic) || (b.label === "HEAD" && a.isStatic);
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))){
+      wheelGroundContacts++;
+    }
 
-    if (headHitGround || headHitAnyStatic){
-      triggerGameOver("Kopf berührt");
-      return;
+    if (state === STATE.PLAY){
+      const headHitGround = (isHead(a) && isGround(b)) || (isHead(b) && isGround(a));
+      const headHitAnyStatic = (isHead(a) && b.isStatic) || (isHead(b) && a.isStatic);
+
+      if (headHitGround || headHitAnyStatic){
+        triggerGameOver("Kopf berührt");
+        return;
+      }
+    }
+  }
+});
+
+Events.on(engine, "collisionEnd", (evt) => {
+  if (!car) return;
+
+  for (const pair of evt.pairs){
+    const a = pair.bodyA;
+    const b = pair.bodyB;
+
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))){
+      wheelGroundContacts = Math.max(0, wheelGroundContacts - 1);
     }
   }
 });
@@ -218,18 +277,29 @@ function triggerGameOver(reason){
   show(gameOverEl);
 }
 
+// -------- Game Flow --------
 function resetWorld(){
   World.clear(world, false);
 
   terrainPoints = [];
   terrainBodies = [];
-
+  wheelGroundContacts = 0;
   fuel = 1.0;
 
-  ensureTerrainUntil(2000);
-  car = createCar(120);
+  const spawnX = 120;
+  const groundY = heightAtX(spawnX);
+
+  // set camera early
+  camera.x = spawnX - window.innerWidth * 0.25;
+  camera.y = groundY - window.innerHeight * 0.55;
+
+  // generate initial terrain WITHOUT cleanup (prevents "no terrain after restart")
+  ensureTerrainUntil(2000, false);
+
+  car = createCar(spawnX);
   distanceStartX = car.chassis.position.x;
 
+  // snap camera to car
   camera.x = car.chassis.position.x - window.innerWidth * 0.25;
   camera.y = car.chassis.position.y - window.innerHeight * 0.55;
 }
@@ -254,6 +324,7 @@ btnBack.addEventListener("click", (e) => { e.preventDefault(); backToMenu(); });
 
 show(menuEl);
 
+// -------- Loop --------
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 let lastTs = performance.now();
 
@@ -265,7 +336,7 @@ function step(ts){
     camera.x = car.chassis.position.x - window.innerWidth * 0.25;
     camera.y = car.chassis.position.y - window.innerHeight * 0.55;
 
-    ensureTerrainUntil(car.chassis.position.x + 1600);
+    ensureTerrainUntil(car.chassis.position.x + 1600, true);
 
     if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
 
@@ -276,6 +347,12 @@ function step(ts){
     if (input.brake){
       Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
       Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
+    }
+
+    const airborne = wheelGroundContacts === 0;
+    if (airborne){
+      if (input.gas)   Body.applyTorque(car.chassis, -airTorque);
+      if (input.brake) Body.applyTorque(car.chassis,  airTorque);
     }
 
     Engine.update(engine, 1000/60);
@@ -311,9 +388,10 @@ function render(){
   if (!car) return;
 
   drawBodyRect(car.chassis, 120, 28);
+  drawTorso(car.torso, 18, 44);
+  drawHead(car.head, 12);
   drawWheel(car.wheelA, 20);
   drawWheel(car.wheelB, 20);
-  drawHead(car.head, 12);
 }
 
 function drawBodyRect(body, w, h){
@@ -323,6 +401,18 @@ function drawBodyRect(body, w, h){
   ctx.rotate(body.angle);
   ctx.fillStyle = "#e9eefc";
   ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function drawTorso(body, w, h){
+  const p = worldToScreen(body.position);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(body.angle);
+  ctx.fillStyle = "rgba(233,238,252,0.92)";
+  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  ctx.fillRect(-w/2, -h/2 + 8, w, 6);
   ctx.restore();
 }
 
