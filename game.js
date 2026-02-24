@@ -96,7 +96,6 @@ function heightAtX(x){
 }
 
 function addTerrainSegment(p1, p2){
-  // Segment als dünnes Rechteck, rotiert zum Verlauf
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
   const len = Math.hypot(dx, dy);
@@ -104,15 +103,23 @@ function addTerrainSegment(p1, p2){
   const mid = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
   const ang = Math.atan2(dy, dx);
 
-  const body = Bodies.rectangle(mid.x, mid.y, len, segmentThickness, {
+  // etwas dicker + minimal länger, damit Segmente überlappen
+  const body = Bodies.rectangle(mid.x, mid.y, len + 6, segmentThickness + 14, {
     isStatic: true,
     friction: 1.0,
-    restitution: 0.0,
-    angle: ang
+    restitution: 0.0
   });
 
-  terrainBodies.push(body);
-  World.add(world, body);
+  // Winkel sicher setzen (nicht nur per options)
+  Body.setAngle(body, ang);
+
+  // "Caps" an Segment-Enden gegen Lücken
+  const capR = (segmentThickness + 14) * 0.35;
+  const cap1 = Bodies.circle(p1.x, p1.y, capR, { isStatic: true, friction: 1.0, restitution: 0.0 });
+  const cap2 = Bodies.circle(p2.x, p2.y, capR, { isStatic: true, friction: 1.0, restitution: 0.0 });
+
+  terrainBodies.push(body, cap1, cap2);
+  World.add(world, [body, cap1, cap2]);
 }
 
 function ensureTerrainUntil(xMax){
