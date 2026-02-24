@@ -9,9 +9,30 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <title>Mini Hill Climb</title>
+
+  <style>
+    /* BUILD Badge */
+    #build-badge {
+      position: fixed;
+      top: calc(env(safe-area-inset-top) + 10px);
+      right: 10px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(10px);
+      color: #e9eefc;
+      font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      z-index: 9999;
+      opacity: 0.85;
+      pointer-events: none;
+    }
+  </style>
 </head>
 
 <body>
+
+  <div id="build-badge">BUILD B001</div>
+
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
     <div class="chip" id="fuel">Fuel: 100%</div>
@@ -25,36 +46,27 @@
     <button id="gas" aria-label="Gas">⟲</button>
   </div>
 
-  <!-- Matter.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
   <script src="game.js"></script>
 
   <script>
-    // PWA Service Worker
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    const reg = await navigator.serviceWorker.register("./sw.js");
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async () => {
+        const reg = await navigator.serviceWorker.register("./sw.js");
 
-    // Start: sofort checken
-    if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
+        if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
 
-    // alle 60s checken
-    setInterval(async () => {
-      try { await reg.update(); } catch {}
-      if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
-    }, 60000);
+        setInterval(async () => {
+          try { await reg.update(); } catch {}
+          if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
+        }, 60000);
 
-    navigator.serviceWorker.addEventListener("message", (e) => {
-      if (e.data?.type === "UPDATE_READY") {
-        if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-      }
-    });
-
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      window.location.reload();
-    });
-  });
-}
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          window.location.reload();
+        });
+      });
+    }
   </script>
+
 </body>
 </html>
