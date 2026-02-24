@@ -1,1 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b0f1a" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Mini Hill Climb</title>
+</head>
 
+<body>
+  <div id="hud">
+    <div class="chip" id="speed">0 km/h</div>
+    <div class="chip" id="fuel">Fuel: 100%</div>
+    <div class="chip" id="dist">0 m</div>
+  </div>
+
+  <canvas id="c"></canvas>
+
+  <div id="controls">
+    <button id="brake" aria-label="Bremse">⟲</button>
+    <button id="gas" aria-label="Gas">⟲</button>
+  </div>
+
+  <!-- Matter.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+  <script src="game.js"></script>
+
+  <script>
+    // PWA Service Worker
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+    }
+  </script>
+</body>
+</html>
