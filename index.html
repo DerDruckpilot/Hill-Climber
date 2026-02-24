@@ -31,9 +31,30 @@
 
   <script>
     // PWA Service Worker
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
-    }
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    const reg = await navigator.serviceWorker.register("./sw.js");
+
+    // Start: sofort checken
+    if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
+
+    // alle 60s checken
+    setInterval(async () => {
+      try { await reg.update(); } catch {}
+      if (reg.active) reg.active.postMessage({ type: "CHECK_UPDATE" });
+    }, 60000);
+
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data?.type === "UPDATE_READY") {
+        if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+    });
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      window.location.reload();
+    });
+  });
+}
   </script>
 </body>
 </html>
