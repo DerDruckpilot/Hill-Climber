@@ -1,5 +1,5 @@
 
-/* Mini Hill Climb – BUILD B013
+/* Mini Hill Climb – BUILD B014
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
@@ -103,15 +103,14 @@ function drawSpriteStatus(){
 // -------- Visual tuning (sprites vs physics) --------
 // Physics bodies keep their sizes; sprites are drawn with these VISUAL sizes.
 const VIS = {
-  chassisW: 210, chassisH: 56,      // visual size for Karosserie
-  wheelD: 64,                       // visual wheel diameter
-  torsoW: 44, torsoH: 72,           // visual torso
-  headD: 40,                        // visual head
-  // Anchor offsets (screen px) applied before rotation:
-  chassisOff: { x: 0, y: -6 },
-  wheelOff:   { x: 0, y: 0 },
-  torsoOff:   { x: 2, y: -10 },
-  headOff:    { x: 2, y: -16 },
+  chassisW: 210, chassisH: 112,     // taller body (was 56)
+  wheelD: 64,
+  torsoW: 44, torsoH: 72,
+  headD: 46,
+  chassisOff: { x: 0, y: -22 },    // lift art a bit (taller sprite)
+  wheelOff:   { x: 0, y: -6 },
+  torsoOff:   { x: -10, y: 26 },   // push driver down into the car
+  headOff:    { x: -10, y: 18 },
 };
 
 // -------- Params --------
@@ -254,7 +253,7 @@ function createCar(x){
     damping: 0.15
   });
 
-  const torso = Bodies.rectangle(x - 10, spawnY - 6, 18, 40, {
+  const torso = Bodies.rectangle(x - 10, spawnY + 6, 18, 40, {
     density: 0.0006,
     friction: 0.2,
     label: "TORSO"
@@ -262,7 +261,7 @@ function createCar(x){
 
   const torsoMount = Constraint.create({
     bodyA: chassis,
-    pointA: { x: -6, y:-8 },
+    pointA: { x: -6, y: 2 },
     bodyB: torso,
     pointB: { x:0, y: 16 },
     length: 2,
@@ -270,14 +269,14 @@ function createCar(x){
     damping: 0.35
   });
 
-  const head = Bodies.circle(x - 10, spawnY - 30, 12, {
+  const head = Bodies.circle(x - 10, spawnY - 18, 12, {
     isSensor: true,
     label: "HEAD"
   });
 
   const neck = Constraint.create({
     bodyA: torso,
-    pointA: { x:0, y:-18 },
+    pointA: { x:0, y:-14 },
     bodyB: head,
     pointB: { x:0, y: 0 },
     length: 1,
