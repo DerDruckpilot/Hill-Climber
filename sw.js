@@ -1,74 +1,74 @@
-
-/* sw.js – BUILD B009
-   Strategy:
-   - Same-origin requests: NETWORK FIRST, then cache; offline: cache fallback.
-   - This makes code/assets update automatically when online without manual version bumps.
-*/
-
-const CACHE = "hillclimb-cache"; // stable name; we rely on network-first for freshness
-const CORE = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./game.js",
-  "./manifest.json",
-];
+/* Hill-Climber Service Worker – B017 */
+const CACHE = "hillclimber-B017";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    // Best-effort pre-cache (ignore failures)
-    await Promise.allSettled(CORE.map(u => cache.add(u)));
-    await self.skipWaiting();
-  })());
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE).then(cache => cache.addAll([
+      "./",
+      "./index.html",
+      "./style.css",
+      "./manifest.json",
+      "./assets/Karosserie.PNG",
+      "./assets/Rad.PNG",
+      "./assets/Koerper.PNG",
+      "./assets/Kopf.PNG",
+    ])).catch(()=>{})
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => (k === CACHE) ? null : caches.delete(k)));
     await self.clients.claim();
   })());
 });
 
 self.addEventListener("message", (event) => {
-  if (!event.data) return;
-  if (event.data.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
-function isSameOrigin(req){
-  try { return new URL(req.url).origin === self.location.origin; } catch { return false; }
+function isNetworkFirst(url) {
+  return url.pathname.endsWith("/index.html") ||
+         url.pathname.endsWith("/game.js") ||
+         url.pathname.endsWith("/style.css") ||
+         url.pathname.endsWith("/manifest.json") ||
+         url.pathname === new URL(self.registration.scope).pathname ||
+         url.pathname.endsWith("/");
 }
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-
-  // Only handle GET
   if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
-  // For cross-origin (CDN matter.js), just pass through
-  if (!isSameOrigin(req)) return;
+  if (isNetworkFirst(url)) {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req, { cache: "no-store" });
+        const cache = await caches.open(CACHE);
+        cache.put(req, fresh.clone());
+        return fresh;
+      } catch (e) {
+        const cached = await caches.match(req, { ignoreSearch: false });
+        return cached || caches.match("./index.html") || Response.error();
+      }
+    })());
+    return;
+  }
 
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-
-    // Network first
+    const cached = await caches.match(req, { ignoreSearch: false });
+    if (cached) return cached;
     try {
-      const fresh = await fetch(req, { cache: "no-store" });
-      // Cache successful responses
-      if (fresh && fresh.ok) {
-        cache.put(req, fresh.clone());
-      }
+      const fresh = await fetch(req);
+      const cache = await caches.open(CACHE);
+      cache.put(req, fresh.clone());
       return fresh;
     } catch (e) {
-      // Offline fallback
-      const cached = await cache.match(req, { ignoreSearch: true });
-      if (cached) return cached;
-
-      // If navigation, fallback to cached index
-      if (req.mode === "navigate") {
-        const idx = await cache.match("./index.html");
-        if (idx) return idx;
-      }
-      throw e;
+      return cached || Response.error();
     }
   })());
 });
