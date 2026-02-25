@@ -1,11 +1,11 @@
 
-/* Mini Hill Climb – BUILD B021
+/* Mini Hill Climb – BUILD B022
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B021";
+window.__BUILD__ = "BUILD B022";
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
@@ -18,6 +18,32 @@ const uiFuel  = document.getElementById("fuel");
 const uiDist  = document.getElementById("dist");
 const uiBuild = document.getElementById("build");
 if (uiBuild) uiBuild.textContent = window.__BUILD__;
+
+// Simple on-screen error box (iOS-friendly)
+let __errBox = null;
+function showFatal(msg){
+  try{
+    if (!__errBox){
+      __errBox = document.createElement("div");
+      __errBox.style.position="fixed";
+      __errBox.style.inset="12px";
+      __errBox.style.zIndex="10000";
+      __errBox.style.background="rgba(0,0,0,0.85)";
+      __errBox.style.color="#fff";
+      __errBox.style.font="14px system-ui,-apple-system";
+      __errBox.style.padding="12px";
+      __errBox.style.borderRadius="12px";
+      __errBox.style.whiteSpace="pre-wrap";
+      __errBox.style.pointerEvents="auto";
+      __errBox.addEventListener("click", ()=>{ __errBox.remove(); __errBox=null; });
+      document.body.appendChild(__errBox);
+    }
+    __errBox.textContent = "FEHLER\n\n" + msg + "\n\n(Tippen zum Schließen)";
+  }catch(e){}
+}
+window.addEventListener("error", (e)=>{
+  showFatal(String(e?.message||e));
+});
 
 
 const menuEl = document.getElementById("menu");
@@ -32,8 +58,18 @@ try{
   if (gameOverEl){ gameOverEl.style.position="fixed"; gameOverEl.style.inset="0"; gameOverEl.style.zIndex="9999"; }
 }catch(e){}
 
-function show(el){ el.classList.add("is-visible"); try{ el.style.pointerEvents="auto"; }catch(e){} }
-function hide(el){ el.classList.remove("is-visible"); try{ el.style.pointerEvents="none"; }catch(e){} }
+function show(el){
+  if (!el) return;
+  el.classList.add("is-visible");
+  try{ el.style.display = "flex"; }catch(e){}
+  try{ el.style.pointerEvents = "auto"; }catch(e){}
+}
+function hide(el){
+  if (!el) return;
+  el.classList.remove("is-visible");
+  try{ el.style.pointerEvents = "none"; }catch(e){}
+  try{ el.style.display = "none"; }catch(e){}
+}catch(e){} }
 
 function resize() {
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -336,9 +372,16 @@ function resetWorld(){
 }
 
 function startGame(){
-  hide(menuEl); hide(gameOverEl);
-  state = STATE.PLAY;
-  resetWorld();
+  try{
+    if (uiBuild) uiBuild.textContent = window.__BUILD__ + " · START";
+    hide(menuEl); hide(gameOverEl);
+    state = STATE.PLAY;
+    resetWorld();
+  } catch (e) {
+    state = STATE.MENU;
+    show(menuEl);
+    showFatal(e && e.stack ? e.stack : String(e));
+  }
 }
 function backToMenu(){
   state = STATE.MENU;
