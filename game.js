@@ -1,16 +1,14 @@
 
-/* Mini Hill Climb – BUILD B009
-   - Uses pixel-art sprites from ./assets/
-     Karosserie.png, Rad.png, Koerper.png, Kopf.png
-   - Fallback to simple shapes if sprites not loaded yet.
+/* Mini Hill Climb – BUILD B011
+   Sprite loading diagnostics:
+   - Tries multiple candidate paths/case variants (GitHub Pages is case-sensitive)
+   - Shows a small status line for each sprite so we can see what's missing.
 */
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d", { alpha: false });
-
-// Pixel look: don't blur sprites
 ctx.imageSmoothingEnabled = false;
 
 const uiSpeed = document.getElementById("speed");
@@ -43,37 +41,69 @@ const engine = Engine.create();
 engine.gravity.y = 1.2;
 const world = engine.world;
 
-// -------- Sprites --------
+// -------- Sprites (robust) --------
 const SPRITES = {
-  body: { path: "./assets/Karosserie.png", img: null, ok:false },
-  wheel:{ path: "./assets/Rad.png",        img: null, ok:false },
-  torso:{ path: "./assets/Koerper.png",    img: null, ok:false },
-  head: { path: "./assets/Kopf.png",       img: null, ok:false },
+  body:  { img:null, ok:false, tried:[], loadedFrom:null },
+  wheel: { img:null, ok:false, tried:[], loadedFrom:null },
+  torso: { img:null, ok:false, tried:[], loadedFrom:null },
+  head:  { img:null, ok:false, tried:[], loadedFrom:null },
 };
-let spritesReady = false;
+
+const CANDIDATES = {
+  body:  ["assets/Karosserie.PNG","assets/Karosserie.png","assets/karosserie.png","assets/KAROSSERIE.PNG","assets/KAROSSERIE.png","./assets/Karosserie.PNG","./assets/Karosserie.png","./assets/karosserie.png"],
+  wheel: ["assets/Rad.PNG","assets/Rad.png","assets/rad.png","assets/RAD.PNG","assets/RAD.png","./assets/Rad.PNG","./assets/Rad.png","./assets/rad.png"],
+  torso: ["assets/Koerper.PNG","assets/Koerper.png","assets/koerper.png","assets/KOERPER.PNG","assets/KOERPER.png","./assets/Koerper.PNG","./assets/Koerper.png","./assets/koerper.png"],
+  head:  ["assets/Kopf.PNG","assets/Kopf.png","assets/kopf.png","assets/KOPF.PNG","assets/KOPF.png","./assets/Kopf.PNG","./assets/Kopf.png","./assets/kopf.png"],
+};
 
 function loadImage(path){
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve({ ok:true, img });
-    img.onerror = () => resolve({ ok:false, img:null });
+    img.onload = () => resolve({ ok:true, img, path });
+    img.onerror = () => resolve({ ok:false, img:null, path });
     img.src = path;
   });
 }
 
-async function loadSprites(){
-  const keys = Object.keys(SPRITES);
-  const results = await Promise.all(keys.map(k => loadImage(SPRITES[k].path)));
-  results.forEach((r, i) => {
-    const k = keys[i];
-    SPRITES[k].ok = r.ok;
-    SPRITES[k].img = r.img;
-  });
-  spritesReady = keys.every(k => SPRITES[k].ok);
-  // Even if not all loaded, we still run with fallbacks.
+async function loadSprite(key){
+  const list = CANDIDATES[key] || [];
+  for (const p of list){
+    SPRITES[key].tried.push(p);
+    const r = await loadImage(p);
+    if (r.ok){
+      SPRITES[key].ok = true;
+      SPRITES[key].img = r.img;
+      SPRITES[key].loadedFrom = p;
+      return true;
+    }
+  }
+  return false;
 }
 
-loadSprites();
+async function loadAllSprites(){
+  await Promise.all(Object.keys(SPRITES).map(k => loadSprite(k)));
+}
+loadAllSprites();
+
+function drawSpriteStatus(){
+  // small debug text top-left (below HUD, unobtrusive)
+  ctx.save();
+  ctx.font = "12px system-ui, -apple-system";
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  const lines = [];
+  for (const k of ["body","wheel","torso","head"]){
+    const s = SPRITES[k];
+    lines.push(`${k}: ${s.ok ? "OK" : "MISS"}${s.loadedFrom ? " ("+s.loadedFrom+")" : ""}`);
+  }
+  let y = 58;
+  for (const ln of lines){
+    ctx.fillText(ln, 12, y);
+    y += 14;
+  }
+  ctx.restore();
+}
 
 // -------- Params --------
 let fuel = 1.0;
@@ -82,7 +112,6 @@ const fuelDrainPerSec = 0.008;
 const motorTorque = 0.0025;
 const maxAngular  = 0.45;
 
-// Air control (dt-scaled)
 const airAngularPerSec = 0.55;
 const airAngularClamp  = 0.55;
 
@@ -216,7 +245,6 @@ function createCar(x){
     damping: 0.15
   });
 
-  // driver placement (B007)
   const torso = Bodies.rectangle(x + 2, spawnY - 18, 18, 40, {
     density: 0.0006,
     friction: 0.2,
@@ -249,7 +277,6 @@ function createCar(x){
   });
 
   World.add(world, [chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck]);
-
   return { chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck };
 }
 
@@ -376,16 +403,11 @@ function step(ts){
     const airborne = wheelGroundContacts === 0;
     if (airborne){
       const dW = airAngularPerSec * dt;
-      if (input.gas){
-        Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity - dW, -airAngularClamp, airAngularClamp));
-      }
-      if (input.brake){
-        Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity + dW, -airAngularClamp, airAngularClamp));
-      }
+      if (input.gas)   Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity - dW, -airAngularClamp, airAngularClamp));
+      if (input.brake) Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity + dW, -airAngularClamp, airAngularClamp));
     }
 
     Engine.update(engine, 1000/60);
-
     if (fuel <= 0) triggerGameOver("Kein Fuel");
   } else {
     Engine.update(engine, 1000/60);
@@ -396,16 +418,12 @@ function step(ts){
   requestAnimationFrame(step);
 }
 
-// -------- Render helpers --------
-function worldToScreen(p){
-  return { x: (p.x - camera.x), y: (p.y - camera.y) };
-}
+function worldToScreen(p){ return { x: (p.x - camera.x), y: (p.y - camera.y) }; }
 
 function drawSpriteCenteredRot(img, x, y, w, h, angle){
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  // Draw image into desired size (pixel-art; smoothing disabled)
   ctx.drawImage(img, -w/2, -h/2, w, h);
   ctx.restore();
 }
@@ -414,45 +432,40 @@ function render(){
   ctx.fillStyle = "#0b0f1a";
   ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
 
-  // terrain line
   ctx.strokeStyle = "rgba(255,255,255,0.40)";
   ctx.lineWidth = 3;
   ctx.beginPath();
   for (let i=0;i<terrainPoints.length;i++){
     const s = worldToScreen(terrainPoints[i]);
-    if (i===0) ctx.moveTo(s.x, s.y);
-    else ctx.lineTo(s.x, s.y);
+    if (i===0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
   }
   ctx.stroke();
 
+  drawSpriteStatus();
+
   if (!car) return;
 
-  // Car sprites (fallback to shapes if missing)
   const cp = worldToScreen(car.chassis.position);
   const wpA = worldToScreen(car.wheelA.position);
   const wpB = worldToScreen(car.wheelB.position);
   const tp = worldToScreen(car.torso.position);
   const hp = worldToScreen(car.head.position);
 
-  // IMPORTANT: sizes must match physics sizes
   const chassisW = 120, chassisH = 28;
   const wheelD = 40;
   const torsoW = 18, torsoH = 40;
   const headD = 24;
 
-  // Body (Karosserie)
-  if (SPRITES.body.ok) drawSpriteCenteredRot(SPRITES.body.img, cp.x, cp.y, chassisW, chassisH, car.chassis.angle);
+  if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x, cp.y, chassisW, chassisH, car.chassis.angle);
   else drawBodyRect(car.chassis, chassisW, chassisH);
 
-  // Torso / Head
   if (SPRITES.torso.ok) drawSpriteCenteredRot(SPRITES.torso.img, tp.x, tp.y, torsoW, torsoH, car.torso.angle);
   else drawTorso(car.torso, torsoW, torsoH);
 
-  if (SPRITES.head.ok) drawSpriteCenteredRot(SPRITES.head.img, hp.x, hp.y, headD, headD, car.head.angle);
+  if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x, hp.y, headD, headD, car.head.angle);
   else drawHead(car.head, headD/2);
 
-  // Wheels
-  if (SPRITES.wheel.ok) {
+  if (SPRITES.wheel.ok){
     drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle);
     drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle);
   } else {
@@ -463,45 +476,29 @@ function render(){
 
 function drawBodyRect(body, w, h){
   const p = worldToScreen(body.position);
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(body.angle);
-  ctx.fillStyle = "#e9eefc";
-  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
+  ctx.fillStyle = "#e9eefc"; ctx.fillRect(-w/2, -h/2, w, h);
   ctx.restore();
 }
 function drawTorso(body, w, h){
   const p = worldToScreen(body.position);
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(body.angle);
-  ctx.fillStyle = "rgba(233,238,252,0.92)";
-  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
+  ctx.fillStyle = "rgba(233,238,252,0.92)"; ctx.fillRect(-w/2, -h/2, w, h);
   ctx.restore();
 }
 function drawWheel(body, r){
   const p = worldToScreen(body.position);
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(body.angle);
-  ctx.beginPath();
-  ctx.arc(0,0,r,0,Math.PI*2);
-  ctx.fillStyle = "#e9eefc";
-  ctx.fill();
-  ctx.restore();
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.fillStyle = "#e9eefc"; ctx.fill(); ctx.restore();
 }
 function drawHead(body, r){
   const p = worldToScreen(body.position);
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.beginPath();
-  ctx.arc(0,0,r,0,Math.PI*2);
-  ctx.fillStyle = "rgba(233,238,252,0.92)";
-  ctx.fill();
-  ctx.restore();
+  ctx.save(); ctx.translate(p.x, p.y);
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.fillStyle = "rgba(233,238,252,0.92)"; ctx.fill(); ctx.restore();
 }
 
-// -------- HUD --------
 function updateHUD(){
   if (!car || state !== STATE.PLAY){
     uiSpeed.textContent = `0 km/h`;
@@ -509,12 +506,10 @@ function updateHUD(){
     uiDist.textContent = `0 m`;
     return;
   }
-
   const vx = car.chassis.velocity.x;
   const kmh = Math.round(Math.abs(vx) * 3.6 * 2.2);
   uiSpeed.textContent = `${kmh} km/h`;
   uiFuel.textContent = `Fuel: ${Math.round(fuel*100)}%`;
-
   const dist = Math.max(0, car.chassis.position.x - distanceStartX);
   uiDist.textContent = `${Math.round(dist/10)} m`;
 }
