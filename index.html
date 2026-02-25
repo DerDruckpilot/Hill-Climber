@@ -12,7 +12,7 @@
 </head>
 <body>
 
-  <div id="build-badge">BUILD B019</div>
+  <div id="build-badge">BUILD B020</div>
 
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
@@ -45,13 +45,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
-  <script src="game.js?v=B019"></script>
+  <script src="game.js?v=B020"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
         try {
-          const reg = await navigator.serviceWorker.register("./sw.js?v=B019");
+          const reg = await navigator.serviceWorker.register("./sw.js?v=B020");
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
           reg.addEventListener("updatefound", () => {
             const nw = reg.installing;
