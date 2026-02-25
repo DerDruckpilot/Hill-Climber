@@ -1,5 +1,5 @@
-/* Hill-Climber Service Worker – B022 */
-const CACHE = "hillclimber-B022";
+/* Hill-Climber Service Worker – B023 */
+const CACHE = "hillclimber-B023";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
