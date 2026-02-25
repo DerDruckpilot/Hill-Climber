@@ -6,14 +6,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0b0f1a" />
-  <link rel="manifest" href="manifest.json?v=B009" />
-  <link rel="stylesheet" href="style.css?v=B009" />
+  <link rel="manifest" href="manifest.json?v=B010" />
+  <link rel="stylesheet" href="style.css?v=B010" />
   <title>Mini Hill Climb</title>
 </head>
-
 <body>
 
-  <div id="build-badge">BUILD B009</div>
+  <div id="build-badge">BUILD B010</div>
 
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
@@ -28,7 +27,6 @@
     <button id="gas" aria-label="Gas">⟲</button>
   </div>
 
-  <!-- Main Menu -->
   <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü">
     <div class="panel">
       <div class="title">Mini Hill Climb</div>
@@ -38,7 +36,6 @@
     </div>
   </div>
 
-  <!-- Game Over -->
   <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over">
     <div class="panel">
       <div class="title">Game Over</div>
@@ -48,34 +45,24 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
-  <!-- cache-bust game.js so Safari/PWA does not keep old cached script -->
-  <script src="game.js?v=B009"></script>
+  <script src="game.js?v=B010"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
         try {
-          const reg = await navigator.serviceWorker.register("./sw.js?v=B009");
-          // Ask SW to activate immediately if a new one is waiting
+          const reg = await navigator.serviceWorker.register("./sw.js?v=B010");
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
           reg.addEventListener("updatefound", () => {
             const nw = reg.installing;
             if (!nw) return;
             nw.addEventListener("statechange", () => {
-              if (nw.state === "installed" && reg.waiting) {
-                reg.waiting.postMessage({ type: "SKIP_WAITING" });
-              }
+              if (nw.state === "installed" && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
             });
           });
-          // periodic update check
           setInterval(() => { try { reg.update(); } catch {} }, 60000);
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            // reload once, then keep running
-            window.location.reload();
-          });
-        } catch (e) {
-          // no-op
-        }
+          navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
+        } catch {}
       });
     }
   </script>
