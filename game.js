@@ -1,9 +1,7 @@
 
-/* Mini Hill Climb – BUILD B005
-   - Driver torso + head (stiffer, correct placement)
-   - Reliable restart terrain generation
-   - Air control (tilt with gas/brake when airborne)
-   - Game over if head touches ground/static
+/* Mini Hill Climb – BUILD B006
+   Fix: Air-control no longer uses Body.applyTorque (not available in matter-js 0.19.0 CDN).
+        Uses safe chassis angular-velocity nudging when airborne.
 */
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
@@ -47,8 +45,9 @@ const fuelDrainPerSec = 0.008;
 const motorTorque = 0.0025;
 const maxAngular  = 0.45;
 
-// Air control torque on chassis when airborne
-const airTorque = 0.0035;
+// Air control as chassis angular velocity nudge when airborne
+const airAngularStep = 0.020;
+const airAngularClamp = 0.85;
 
 const terrainStep = 28;
 const terrainAmp  = 120;
@@ -141,8 +140,6 @@ function ensureTerrainUntil(xMax, doCleanup = true){
 // -------- Car + Driver --------
 let car = null;
 let distanceStartX = 0;
-
-// Wheel-ground contact tracking for air control
 let wheelGroundContacts = 0;
 
 function createCar(x){
@@ -183,14 +180,12 @@ function createCar(x){
     damping: 0.15
   });
 
-  // Driver torso protruding from chassis
   const torso = Bodies.rectangle(x - 18, spawnY - 30, 18, 44, {
     density: 0.001,
     friction: 0.2,
     label: "TORSO"
   });
 
-  // Rigid-ish mount torso to chassis
   const torsoMount = Constraint.create({
     bodyA: chassis,
     pointA: { x:-18, y:-14 },
@@ -201,7 +196,6 @@ function createCar(x){
     damping: 0.35
   });
 
-  // Driver head on top of torso (sensor for game over)
   const head = Bodies.circle(x - 18, spawnY - 62, 12, {
     isSensor: true,
     label: "HEAD"
@@ -289,17 +283,14 @@ function resetWorld(){
   const spawnX = 120;
   const groundY = heightAtX(spawnX);
 
-  // set camera early
   camera.x = spawnX - window.innerWidth * 0.25;
   camera.y = groundY - window.innerHeight * 0.55;
 
-  // generate initial terrain WITHOUT cleanup (prevents "no terrain after restart")
   ensureTerrainUntil(2000, false);
 
   car = createCar(spawnX);
   distanceStartX = car.chassis.position.x;
 
-  // snap camera to car
   camera.x = car.chassis.position.x - window.innerWidth * 0.25;
   camera.y = car.chassis.position.y - window.innerHeight * 0.55;
 }
@@ -351,8 +342,18 @@ function step(ts){
 
     const airborne = wheelGroundContacts === 0;
     if (airborne){
-      if (input.gas)   Body.applyTorque(car.chassis, -airTorque);
-      if (input.brake) Body.applyTorque(car.chassis,  airTorque);
+      if (input.gas){
+        Body.setAngularVelocity(
+          car.chassis,
+          clamp(car.chassis.angularVelocity - airAngularStep, -airAngularClamp, airAngularClamp)
+        );
+      }
+      if (input.brake){
+        Body.setAngularVelocity(
+          car.chassis,
+          clamp(car.chassis.angularVelocity + airAngularStep, -airAngularClamp, airAngularClamp)
+        );
+      }
     }
 
     Engine.update(engine, 1000/60);
