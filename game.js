@@ -1,8 +1,8 @@
 
-/* Mini Hill Climb – BUILD B011
-   Sprite loading diagnostics:
-   - Tries multiple candidate paths/case variants (GitHub Pages is case-sensitive)
-   - Shows a small status line for each sprite so we can see what's missing.
+/* Mini Hill Climb – BUILD B012
+   - Sprite sizes/offsets tuned so graphics match physics better.
+   - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
+   - Keeps debug sprite status lines.
 */
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
@@ -43,17 +43,17 @@ const world = engine.world;
 
 // -------- Sprites (robust) --------
 const SPRITES = {
-  body:  { img:null, ok:false, tried:[], loadedFrom:null },
-  wheel: { img:null, ok:false, tried:[], loadedFrom:null },
-  torso: { img:null, ok:false, tried:[], loadedFrom:null },
-  head:  { img:null, ok:false, tried:[], loadedFrom:null },
+  body:  { img:null, ok:false, loadedFrom:null },
+  wheel: { img:null, ok:false, loadedFrom:null },
+  torso: { img:null, ok:false, loadedFrom:null },
+  head:  { img:null, ok:false, loadedFrom:null },
 };
 
 const CANDIDATES = {
-  body:  ["assets/Karosserie.PNG","assets/Karosserie.png","assets/karosserie.png","assets/KAROSSERIE.PNG","assets/KAROSSERIE.png","./assets/Karosserie.PNG","./assets/Karosserie.png","./assets/karosserie.png"],
-  wheel: ["assets/Rad.PNG","assets/Rad.png","assets/rad.png","assets/RAD.PNG","assets/RAD.png","./assets/Rad.PNG","./assets/Rad.png","./assets/rad.png"],
-  torso: ["assets/Koerper.PNG","assets/Koerper.png","assets/koerper.png","assets/KOERPER.PNG","assets/KOERPER.png","./assets/Koerper.PNG","./assets/Koerper.png","./assets/koerper.png"],
-  head:  ["assets/Kopf.PNG","assets/Kopf.png","assets/kopf.png","assets/KOPF.PNG","assets/KOPF.png","./assets/Kopf.PNG","./assets/Kopf.png","./assets/kopf.png"],
+  body:  ["assets/Karosserie.PNG","assets/Karosserie.png","./assets/Karosserie.PNG","./assets/Karosserie.png"],
+  wheel: ["assets/Rad.PNG","assets/Rad.png","./assets/Rad.PNG","./assets/Rad.png"],
+  torso: ["assets/Koerper.PNG","assets/Koerper.png","./assets/Koerper.PNG","./assets/Koerper.png"],
+  head:  ["assets/Kopf.PNG","assets/Kopf.png","./assets/Kopf.PNG","./assets/Kopf.png"],
 };
 
 function loadImage(path){
@@ -66,9 +66,7 @@ function loadImage(path){
 }
 
 async function loadSprite(key){
-  const list = CANDIDATES[key] || [];
-  for (const p of list){
-    SPRITES[key].tried.push(p);
+  for (const p of (CANDIDATES[key] || [])){
     const r = await loadImage(p);
     if (r.ok){
       SPRITES[key].ok = true;
@@ -86,24 +84,35 @@ async function loadAllSprites(){
 loadAllSprites();
 
 function drawSpriteStatus(){
-  // small debug text top-left (below HUD, unobtrusive)
   ctx.save();
   ctx.font = "12px system-ui, -apple-system";
   ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  const lines = [];
-  for (const k of ["body","wheel","torso","head"]){
-    const s = SPRITES[k];
-    lines.push(`${k}: ${s.ok ? "OK" : "MISS"}${s.loadedFrom ? " ("+s.loadedFrom+")" : ""}`);
-  }
+  const lines = [
+    `body: ${SPRITES.body.ok ? "OK" : "MISS"}${SPRITES.body.loadedFrom ? " ("+SPRITES.body.loadedFrom+")" : ""}`,
+    `wheel: ${SPRITES.wheel.ok ? "OK" : "MISS"}${SPRITES.wheel.loadedFrom ? " ("+SPRITES.wheel.loadedFrom+")" : ""}`,
+    `torso: ${SPRITES.torso.ok ? "OK" : "MISS"}${SPRITES.torso.loadedFrom ? " ("+SPRITES.torso.loadedFrom+")" : ""}`,
+    `head: ${SPRITES.head.ok ? "OK" : "MISS"}${SPRITES.head.loadedFrom ? " ("+SPRITES.head.loadedFrom+")" : ""}`,
+  ];
   let y = 58;
-  for (const ln of lines){
-    ctx.fillText(ln, 12, y);
-    y += 14;
-  }
+  for (const ln of lines){ ctx.fillText(ln, 12, y); y += 14; }
   ctx.restore();
 }
+
+// -------- Visual tuning (sprites vs physics) --------
+// Physics bodies keep their sizes; sprites are drawn with these VISUAL sizes.
+const VIS = {
+  chassisW: 210, chassisH: 56,      // visual size for Karosserie
+  wheelD: 64,                       // visual wheel diameter
+  torsoW: 44, torsoH: 72,           // visual torso
+  headD: 40,                        // visual head
+  // Anchor offsets (screen px) applied before rotation:
+  chassisOff: { x: 0, y: -6 },
+  wheelOff:   { x: 0, y: 0 },
+  torsoOff:   { x: 2, y: -10 },
+  headOff:    { x: 2, y: -16 },
+};
 
 // -------- Params --------
 let fuel = 1.0;
@@ -280,13 +289,6 @@ function createCar(x){
   return { chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck };
 }
 
-function removeCar(){
-  if (!car) return;
-  World.remove(world, [car.chassis, car.wheelA, car.wheelB, car.suspA, car.suspB, car.torso, car.torsoMount, car.head, car.neck]);
-  car = null;
-}
-
-// -------- Collisions --------
 function isWheel(body){ return body && body.label === "WHEEL"; }
 function isGround(body){ return body && body.label === "GROUND"; }
 function isHead(body){ return body && body.label === "HEAD"; }
@@ -294,20 +296,12 @@ function isHead(body){ return body && body.label === "HEAD"; }
 Events.on(engine, "collisionStart", (evt) => {
   if (!car) return;
   for (const pair of evt.pairs){
-    const a = pair.bodyA;
-    const b = pair.bodyB;
-
-    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))){
-      wheelGroundContacts++;
-    }
-
+    const a = pair.bodyA, b = pair.bodyB;
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))) wheelGroundContacts++;
     if (state === STATE.PLAY){
       const headHitGround = (isHead(a) && isGround(b)) || (isHead(b) && isGround(a));
       const headHitAnyStatic = (isHead(a) && b.isStatic) || (isHead(b) && a.isStatic);
-      if (headHitGround || headHitAnyStatic){
-        triggerGameOver("Kopf berührt");
-        return;
-      }
+      if (headHitGround || headHitAnyStatic){ triggerGameOver("Kopf berührt"); return; }
     }
   }
 });
@@ -315,11 +309,8 @@ Events.on(engine, "collisionStart", (evt) => {
 Events.on(engine, "collisionEnd", (evt) => {
   if (!car) return;
   for (const pair of evt.pairs){
-    const a = pair.bodyA;
-    const b = pair.bodyB;
-    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))){
-      wheelGroundContacts = Math.max(0, wheelGroundContacts - 1);
-    }
+    const a = pair.bodyA, b = pair.bodyB;
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))) wheelGroundContacts = Math.max(0, wheelGroundContacts - 1);
   }
 });
 
@@ -331,10 +322,8 @@ function triggerGameOver(reason){
   show(gameOverEl);
 }
 
-// -------- Game Flow --------
 function resetWorld(){
   World.clear(world, false);
-
   terrainPoints = [];
   terrainBodies = [];
   wheelGroundContacts = 0;
@@ -347,7 +336,6 @@ function resetWorld(){
   camera.y = groundY - window.innerHeight * 0.55;
 
   ensureTerrainUntil(2000, false);
-
   car = createCar(spawnX);
   distanceStartX = car.chassis.position.x;
 
@@ -356,31 +344,28 @@ function resetWorld(){
 }
 
 function startGame(){
-  hide(menuEl);
-  hide(gameOverEl);
+  hide(menuEl); hide(gameOverEl);
   state = STATE.PLAY;
   resetWorld();
 }
-
 function backToMenu(){
   state = STATE.MENU;
   input.gas = false; input.brake = false;
-  show(menuEl);
-  hide(gameOverEl);
-  removeCar();
+  show(menuEl); hide(gameOverEl);
+  car = null;
 }
 
-btnStart.addEventListener("click", (e) => { e.preventDefault(); startGame(); });
-btnBack.addEventListener("click", (e) => { e.preventDefault(); backToMenu(); });
+btnStart.addEventListener("click", (e)=>{ e.preventDefault(); startGame(); });
+btnBack.addEventListener("click", (e)=>{ e.preventDefault(); backToMenu(); });
 
 show(menuEl);
 
 // -------- Loop --------
-function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 let lastTs = performance.now();
 
 function step(ts){
-  const dt = Math.max(0, Math.min(0.033, (ts - lastTs)/1000));
+  const dt = Math.max(0, Math.min(0.033, (ts-lastTs)/1000));
   lastTs = ts;
 
   if (state === STATE.PLAY && car){
@@ -388,7 +373,6 @@ function step(ts){
     camera.y = car.chassis.position.y - window.innerHeight * 0.55;
 
     ensureTerrainUntil(car.chassis.position.x + 1600, true);
-
     if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
 
     if (fuel > 0 && input.gas){
@@ -420,9 +404,9 @@ function step(ts){
 
 function worldToScreen(p){ return { x: (p.x - camera.x), y: (p.y - camera.y) }; }
 
-function drawSpriteCenteredRot(img, x, y, w, h, angle){
+function drawSpriteCenteredRot(img, x, y, w, h, angle, off){
   ctx.save();
-  ctx.translate(x, y);
+  ctx.translate(x + (off?.x||0), y + (off?.y||0));
   ctx.rotate(angle);
   ctx.drawImage(img, -w/2, -h/2, w, h);
   ctx.restore();
@@ -442,61 +426,26 @@ function render(){
   ctx.stroke();
 
   drawSpriteStatus();
-
   if (!car) return;
 
-  const cp = worldToScreen(car.chassis.position);
+  const cp  = worldToScreen(car.chassis.position);
   const wpA = worldToScreen(car.wheelA.position);
   const wpB = worldToScreen(car.wheelB.position);
-  const tp = worldToScreen(car.torso.position);
-  const hp = worldToScreen(car.head.position);
+  const tp  = worldToScreen(car.torso.position);
+  const hp  = worldToScreen(car.head.position);
 
-  const chassisW = 120, chassisH = 28;
-  const wheelD = 40;
-  const torsoW = 18, torsoH = 40;
-  const headD = 24;
+  const chassisW = VIS.chassisW, chassisH = VIS.chassisH;
+  const wheelD = VIS.wheelD;
+  const torsoW = VIS.torsoW, torsoH = VIS.torsoH;
+  const headD = VIS.headD;
 
-  if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x, cp.y, chassisW, chassisH, car.chassis.angle);
-  else drawBodyRect(car.chassis, chassisW, chassisH);
-
-  if (SPRITES.torso.ok) drawSpriteCenteredRot(SPRITES.torso.img, tp.x, tp.y, torsoW, torsoH, car.torso.angle);
-  else drawTorso(car.torso, torsoW, torsoH);
-
-  if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x, hp.y, headD, headD, car.head.angle);
-  else drawHead(car.head, headD/2);
-
+  if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x,  cp.y,  chassisW, chassisH, car.chassis.angle, VIS.chassisOff);
   if (SPRITES.wheel.ok){
-    drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle);
-    drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle);
-  } else {
-    drawWheel(car.wheelA, wheelD/2);
-    drawWheel(car.wheelB, wheelD/2);
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle, VIS.wheelOff);
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle, VIS.wheelOff);
   }
-}
-
-function drawBodyRect(body, w, h){
-  const p = worldToScreen(body.position);
-  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
-  ctx.fillStyle = "#e9eefc"; ctx.fillRect(-w/2, -h/2, w, h);
-  ctx.restore();
-}
-function drawTorso(body, w, h){
-  const p = worldToScreen(body.position);
-  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
-  ctx.fillStyle = "rgba(233,238,252,0.92)"; ctx.fillRect(-w/2, -h/2, w, h);
-  ctx.restore();
-}
-function drawWheel(body, r){
-  const p = worldToScreen(body.position);
-  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(body.angle);
-  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
-  ctx.fillStyle = "#e9eefc"; ctx.fill(); ctx.restore();
-}
-function drawHead(body, r){
-  const p = worldToScreen(body.position);
-  ctx.save(); ctx.translate(p.x, p.y);
-  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
-  ctx.fillStyle = "rgba(233,238,252,0.92)"; ctx.fill(); ctx.restore();
+  if (SPRITES.torso.ok) drawSpriteCenteredRot(SPRITES.torso.img, tp.x,  tp.y,  torsoW, torsoH, car.torso.angle, VIS.torsoOff);
+  if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x,  hp.y,  headD, headD, car.head.angle, VIS.headOff);
 }
 
 function updateHUD(){
@@ -516,8 +465,7 @@ function updateHUD(){
 
 ["btnStart","btnBack","gas","brake"].forEach(id => {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener("contextmenu", (e) => e.preventDefault());
+  if (el) el.addEventListener("contextmenu", (e)=>e.preventDefault());
 });
 
 requestAnimationFrame(step);
