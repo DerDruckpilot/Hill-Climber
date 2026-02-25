@@ -1,5 +1,5 @@
 
-/* Mini Hill Climb – BUILD B014
+/* Mini Hill Climb – BUILD B015
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
@@ -430,7 +430,6 @@ function render(){
   const cp  = worldToScreen(car.chassis.position);
   const wpA = worldToScreen(car.wheelA.position);
   const wpB = worldToScreen(car.wheelB.position);
-  const tp  = worldToScreen(car.torso.position);
   const hp  = worldToScreen(car.head.position);
 
   const chassisW = VIS.chassisW, chassisH = VIS.chassisH;
@@ -439,12 +438,18 @@ function render(){
   const headD = VIS.headD;
 
   if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x,  cp.y,  chassisW, chassisH, car.chassis.angle, VIS.chassisOff);
+
+  // Render-only torso locked to chassis (no physics body)
+  if (SPRITES.torso.ok){
+    const torsoAnchor = { x: cp.x, y: cp.y };
+    // seat position relative to chassis art
+    drawSpriteCenteredRot(SPRITES.torso.img, torsoAnchor.x, torsoAnchor.y, VIS.torsoW, VIS.torsoH, car.chassis.angle, VIS.torsoOff);
+  }
   if (SPRITES.wheel.ok){
     drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle, VIS.wheelOff);
     drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle, VIS.wheelOff);
   }
-  if (SPRITES.torso.ok) drawSpriteCenteredRot(SPRITES.torso.img, tp.x,  tp.y,  torsoW, torsoH, car.torso.angle, VIS.torsoOff);
-  if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x,  hp.y,  headD, headD, car.head.angle, VIS.headOff);
+    if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x,  hp.y,  headD, headD, car.head.angle, VIS.headOff);
 }
 
 function updateHUD(){
