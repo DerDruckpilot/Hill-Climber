@@ -1,12 +1,14 @@
 
-/* Mini Hill Climb – BUILD B022
+/* Mini Hill Climb – BUILD B023
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B022";
+window.__BUILD__ = "BUILD B023";
 
+
+try{ const b=document.getElementById("buildJs"); if(b) b.textContent=window.__BUILD__+" · JS OK"; }catch(e){}
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
 const canvas = document.getElementById("c");
@@ -372,12 +374,19 @@ function resetWorld(){
 }
 
 function startGame(){
+  try{ const sub=document.getElementById("menuSub"); if(sub) sub.textContent="startGame() in game.js ausgeführt (B023)"; }catch(_){ }
   try{
     if (uiBuild) uiBuild.textContent = window.__BUILD__ + " · START";
     hide(menuEl); hide(gameOverEl);
     state = STATE.PLAY;
     resetWorld();
   } catch (e) {
+    state = STATE.MENU;
+    show(menuEl);
+    showFatal(e && e.stack ? e.stack : String(e));
+  }
+}
+ catch (e) {
     state = STATE.MENU;
     show(menuEl);
     showFatal(e && e.stack ? e.stack : String(e));
