@@ -1,11 +1,11 @@
 
-/* Mini Hill Climb – BUILD B016
+/* Mini Hill Climb – BUILD B017
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B016";
+window.__BUILD__ = "BUILD B017";
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
