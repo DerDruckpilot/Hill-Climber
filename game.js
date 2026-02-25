@@ -1,5 +1,5 @@
 
-/* Mini Hill Climb – BUILD B012
+/* Mini Hill Climb – BUILD B013
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
@@ -218,7 +218,7 @@ let wheelGroundContacts = 0;
 
 function createCar(x){
   const groundY = heightAtX(x);
-  const spawnY = groundY - 60;
+  const spawnY = groundY - 52;
 
   const chassis = Bodies.rectangle(x, spawnY, 120, 28, {
     density: 0.003,
@@ -226,12 +226,12 @@ function createCar(x){
     label: "CHASSIS"
   });
 
-  const wheelA = Bodies.circle(x - 42, spawnY + 24, 20, {
+  const wheelA = Bodies.circle(x - 34, spawnY + 22, 20, {
     density: 0.002,
     friction: 1.2,
     label: "WHEEL"
   });
-  const wheelB = Bodies.circle(x + 42, spawnY + 24, 20, {
+  const wheelB = Bodies.circle(x + 34, spawnY + 22, 20, {
     density: 0.002,
     friction: 1.2,
     label: "WHEEL"
@@ -239,7 +239,7 @@ function createCar(x){
 
   const suspA = Constraint.create({
     bodyA: chassis,
-    pointA: { x:-42, y: 18 },
+    pointA: { x:-34, y: 18 },
     bodyB: wheelA,
     length: 22,
     stiffness: 0.45,
@@ -247,14 +247,14 @@ function createCar(x){
   });
   const suspB = Constraint.create({
     bodyA: chassis,
-    pointA: { x: 42, y: 18 },
+    pointA: { x: 34, y: 18 },
     bodyB: wheelB,
     length: 22,
     stiffness: 0.45,
     damping: 0.15
   });
 
-  const torso = Bodies.rectangle(x + 2, spawnY - 18, 18, 40, {
+  const torso = Bodies.rectangle(x - 10, spawnY - 6, 18, 40, {
     density: 0.0006,
     friction: 0.2,
     label: "TORSO"
@@ -262,7 +262,7 @@ function createCar(x){
 
   const torsoMount = Constraint.create({
     bodyA: chassis,
-    pointA: { x: 6, y:-10 },
+    pointA: { x: -6, y:-8 },
     bodyB: torso,
     pointB: { x:0, y: 16 },
     length: 2,
@@ -270,14 +270,14 @@ function createCar(x){
     damping: 0.35
   });
 
-  const head = Bodies.circle(x + 2, spawnY - 46, 12, {
+  const head = Bodies.circle(x - 10, spawnY - 30, 12, {
     isSensor: true,
     label: "HEAD"
   });
 
   const neck = Constraint.create({
     bodyA: torso,
-    pointA: { x:0, y:-20 },
+    pointA: { x:0, y:-18 },
     bodyB: head,
     pointB: { x:0, y: 0 },
     length: 1,
