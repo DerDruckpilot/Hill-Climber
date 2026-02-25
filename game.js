@@ -1,11 +1,11 @@
 
-/* Mini Hill Climb – BUILD B020
+/* Mini Hill Climb – BUILD B021
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B020";
+window.__BUILD__ = "BUILD B021";
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
@@ -25,6 +25,12 @@ const gameOverEl = document.getElementById("gameover");
 const goReasonEl = document.getElementById("goReason");
 const btnStart = document.getElementById("btnStart");
 const btnBack  = document.getElementById("btnBack");
+
+// Force overlays above canvas (safety for iOS stacking)
+try{
+  if (menuEl){ menuEl.style.position="fixed"; menuEl.style.inset="0"; menuEl.style.zIndex="9999"; }
+  if (gameOverEl){ gameOverEl.style.position="fixed"; gameOverEl.style.inset="0"; gameOverEl.style.zIndex="9999"; }
+}catch(e){}
 
 function show(el){ el.classList.add("is-visible"); try{ el.style.pointerEvents="auto"; }catch(e){} }
 function hide(el){ el.classList.remove("is-visible"); try{ el.style.pointerEvents="none"; }catch(e){} }
@@ -342,6 +348,7 @@ function backToMenu(){
 }
 
 function bindTap(el, fn){
+  if (!el) return;
   const handler = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){} fn(); };
   el.addEventListener("pointerdown", handler, {passive:false});
   el.addEventListener("touchstart", handler, {passive:false});
@@ -349,6 +356,21 @@ function bindTap(el, fn){
 }
 bindTap(btnStart, startGame);
 bindTap(btnBack, backToMenu);
+
+// If the button is blocked by CSS/layers on iOS, allow "tap anywhere" to start from menu.
+function bindStartAnywhere(){
+  const handler = (e)=>{
+    if (state !== STATE.MENU) return;
+    // ignore taps on control buttons if any
+    const t = e.target;
+    if (t && (t.id === "gas" || t.id === "brake" || t.id === "btnBack")) return;
+    try{ e.preventDefault(); }catch(_){}
+    startGame();
+  };
+  document.addEventListener("pointerdown", handler, {passive:false});
+  document.addEventListener("touchstart", handler, {passive:false});
+}
+bindStartAnywhere();
 
 show(menuEl);
 
