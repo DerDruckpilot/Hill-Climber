@@ -6,21 +6,24 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0b0f1a" />
-  <link rel="manifest" href="manifest.json?v=B023" />
-  <link rel="stylesheet" href="style.css?v=B023" />
+  <link rel="manifest" href="manifest.json?v=B024" />
+  <link rel="stylesheet" href="style.css?v=B024" />
   <title>Mini Hill Climb</title>
   <style>
     #build-badge{position:fixed;top:10px;right:10px;z-index:10001;background:rgba(0,0,0,.55);color:#fff;
       padding:6px 10px;border-radius:10px;font:12px system-ui,-apple-system;backdrop-filter: blur(6px);}
     #build-badge .dim{opacity:.7}
+    #fatal{position:fixed;left:10px;right:10px;bottom:10px;z-index:10002;max-height:45vh;overflow:auto;
+      background:rgba(0,0,0,.78);color:#fff;border-radius:14px;padding:12px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;display:none;white-space:pre-wrap;}
   </style>
 </head>
 <body>
 
   <div id="build-badge">
-    <div><span class="dim">HTML:</span> <span id="buildHtml">BUILD B023</span></div>
+    <div><span class="dim">HTML:</span> <span id="buildHtml">BUILD B024</span></div>
     <div><span class="dim">JS:</span> <span id="buildJs">LOADING…</span></div>
   </div>
+  <div id="fatal"></div>
 
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
@@ -40,7 +43,7 @@
       <div class="title">Mini Hill Climb</div>
       <div class="subtitle" id="menuSub">Tippe auf Start</div>
       <button id="btnStart" class="primary">Start</button>
-      <div class="hint">Debug: wenn JS läuft, steht oben rechts bei „JS:“ eine Build-Nummer.</div>
+      <div class="hint">Debug: oben rechts muss bei „JS:“ **BUILD B024 · JS OK** stehen.</div>
     </div>
   </div>
 
@@ -54,28 +57,36 @@
 
   <script>
     (function(){
-      const btn = document.getElementById("btnStart");
+      const fatal = document.getElementById("fatal");
+      const buildJs = document.getElementById("buildJs");
       const sub = document.getElementById("menuSub");
-      const set = (t)=>{ try{ sub.textContent=t; }catch(e){} };
-      const h = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){}
-        set("START geklickt (Fallback in index.html) …");
-      };
-      ["pointerdown","touchstart","click"].forEach(ev=>btn.addEventListener(ev,h,{passive:false}));
-      setTimeout(()=>{
-        const js = document.getElementById("buildJs");
-        if (js && js.textContent === "LOADING…") set("game.js wurde nicht ausgeführt (siehe JS-Status oben rechts)");
-      }, 2000);
+      function show(msg){
+        try{
+          if (fatal){ fatal.style.display="block"; fatal.textContent = msg; }
+          if (buildJs) buildJs.textContent = "JS ERROR";
+          if (sub) sub.textContent = "JS Fehler – siehe Debug-Overlay unten";
+        }catch(e){}
+      }
+      window.addEventListener("error", (ev)=>{
+        const msg = (ev && ev.error && ev.error.stack) ? ev.error.stack : (ev && ev.message ? ev.message : String(ev));
+        show("window.onerror:\n"+msg);
+      });
+      window.addEventListener("unhandledrejection", (ev)=>{
+        const msg = (ev && ev.reason && ev.reason.stack) ? ev.reason.stack : String(ev && ev.reason ? ev.reason : ev);
+        show("unhandledrejection:\n"+msg);
+      });
     })();
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
-  <script src="game.js?v=B023"></script>
+
+  <script src="game.js?v=B024" onerror="(function(){var b=document.getElementById('buildJs'); if(b)b.textContent='LOAD FAIL'; var f=document.getElementById('fatal'); if(f){f.style.display='block'; f.textContent='game.js konnte nicht geladen werden (404 oder SW Cache-Match).\nURL: '+this.src;} var s=document.getElementById('menuSub'); if(s)s.textContent='game.js LOAD FAIL';})()"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
         try {
-          const reg = await navigator.serviceWorker.register("./sw.js?v=B023");
+          const reg = await navigator.serviceWorker.register("./sw.js?v=B024");
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
           setInterval(() => { try { reg.update(); } catch(e) {} }, 60000);
           navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
