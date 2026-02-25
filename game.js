@@ -1,11 +1,11 @@
 
-/* Mini Hill Climb – BUILD B019
+/* Mini Hill Climb – BUILD B020
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B019";
+window.__BUILD__ = "BUILD B020";
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
@@ -26,8 +26,8 @@ const goReasonEl = document.getElementById("goReason");
 const btnStart = document.getElementById("btnStart");
 const btnBack  = document.getElementById("btnBack");
 
-function show(el){ el.classList.add("is-visible"); }
-function hide(el){ el.classList.remove("is-visible"); }
+function show(el){ el.classList.add("is-visible"); try{ el.style.pointerEvents="auto"; }catch(e){} }
+function hide(el){ el.classList.remove("is-visible"); try{ el.style.pointerEvents="none"; }catch(e){} }
 
 function resize() {
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -341,8 +341,14 @@ function backToMenu(){
   car = null;
 }
 
-btnStart.addEventListener("click", (e)=>{ e.preventDefault(); startGame(); });
-btnBack.addEventListener("click", (e)=>{ e.preventDefault(); backToMenu(); });
+function bindTap(el, fn){
+  const handler = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){} fn(); };
+  el.addEventListener("pointerdown", handler, {passive:false});
+  el.addEventListener("touchstart", handler, {passive:false});
+  el.addEventListener("click", handler);
+}
+bindTap(btnStart, startGame);
+bindTap(btnBack, backToMenu);
 
 show(menuEl);
 
