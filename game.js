@@ -1,7 +1,8 @@
 
-/* Mini Hill Climb – BUILD B006
-   Fix: Air-control no longer uses Body.applyTorque (not available in matter-js 0.19.0 CDN).
-        Uses safe chassis angular-velocity nudging when airborne.
+/* Mini Hill Climb – BUILD B007
+   Tweaks:
+   - Driver torso moved forward and lower; lighter mass => better center of gravity
+   - Air control reduced + scaled by dt (less "spin like crazy")
 */
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
@@ -45,9 +46,9 @@ const fuelDrainPerSec = 0.008;
 const motorTorque = 0.0025;
 const maxAngular  = 0.45;
 
-// Air control as chassis angular velocity nudge when airborne
-const airAngularStep = 0.020;
-const airAngularClamp = 0.85;
+// Air control (dt-scaled)
+const airAngularPerSec = 0.55;   // rad/s^2-ish feel (applied as angularVel delta)
+const airAngularClamp  = 0.55;   // cap
 
 const terrainStep = 28;
 const terrainAmp  = 120;
@@ -55,7 +56,6 @@ const terrainBase = 320;
 const segmentThickness = 26;
 
 const camera = { x: 0, y: 0 };
-
 const input = { gas:false, brake:false };
 
 function bindHold(btn, prop) {
@@ -180,35 +180,37 @@ function createCar(x){
     damping: 0.15
   });
 
-  const torso = Bodies.rectangle(x - 18, spawnY - 30, 18, 44, {
-    density: 0.001,
+  // Driver placement tweak:
+  // Previously: x-18, y-30 (too far back/high). Now: slightly forward (x+2) and lower (y-18).
+  const torso = Bodies.rectangle(x + 2, spawnY - 18, 18, 40, {
+    density: 0.0006,   // lighter => less rear-lift
     friction: 0.2,
     label: "TORSO"
   });
 
   const torsoMount = Constraint.create({
     bodyA: chassis,
-    pointA: { x:-18, y:-14 },
+    pointA: { x: 6, y:-10 },  // forward mount point
     bodyB: torso,
-    pointB: { x:0, y: 18 },
+    pointB: { x:0, y: 16 },
     length: 2,
     stiffness: 1.0,
     damping: 0.35
   });
 
-  const head = Bodies.circle(x - 18, spawnY - 62, 12, {
+  const head = Bodies.circle(x + 2, spawnY - 46, 12, {
     isSensor: true,
     label: "HEAD"
   });
 
   const neck = Constraint.create({
     bodyA: torso,
-    pointA: { x:0, y:-22 },
+    pointA: { x:0, y:-20 },
     bodyB: head,
     pointB: { x:0, y: 0 },
     length: 1,
     stiffness: 1.0,
-    damping: 0.45
+    damping: 0.5
   });
 
   World.add(world, [chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck]);
@@ -222,14 +224,13 @@ function removeCar(){
   car = null;
 }
 
-// -------- Collision handling --------
+// -------- Collisions --------
 function isWheel(body){ return body && body.label === "WHEEL"; }
 function isGround(body){ return body && body.label === "GROUND"; }
 function isHead(body){ return body && body.label === "HEAD"; }
 
 Events.on(engine, "collisionStart", (evt) => {
   if (!car) return;
-
   for (const pair of evt.pairs){
     const a = pair.bodyA;
     const b = pair.bodyB;
@@ -241,7 +242,6 @@ Events.on(engine, "collisionStart", (evt) => {
     if (state === STATE.PLAY){
       const headHitGround = (isHead(a) && isGround(b)) || (isHead(b) && isGround(a));
       const headHitAnyStatic = (isHead(a) && b.isStatic) || (isHead(b) && a.isStatic);
-
       if (headHitGround || headHitAnyStatic){
         triggerGameOver("Kopf berührt");
         return;
@@ -252,11 +252,9 @@ Events.on(engine, "collisionStart", (evt) => {
 
 Events.on(engine, "collisionEnd", (evt) => {
   if (!car) return;
-
   for (const pair of evt.pairs){
     const a = pair.bodyA;
     const b = pair.bodyB;
-
     if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))){
       wheelGroundContacts = Math.max(0, wheelGroundContacts - 1);
     }
@@ -331,6 +329,7 @@ function step(ts){
 
     if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
 
+    // Ground drive
     if (fuel > 0 && input.gas){
       Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
       Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
@@ -340,19 +339,15 @@ function step(ts){
       Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
     }
 
+    // Air control (scaled by dt and capped)
     const airborne = wheelGroundContacts === 0;
     if (airborne){
+      const dW = airAngularPerSec * dt;
       if (input.gas){
-        Body.setAngularVelocity(
-          car.chassis,
-          clamp(car.chassis.angularVelocity - airAngularStep, -airAngularClamp, airAngularClamp)
-        );
+        Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity - dW, -airAngularClamp, airAngularClamp));
       }
       if (input.brake){
-        Body.setAngularVelocity(
-          car.chassis,
-          clamp(car.chassis.angularVelocity + airAngularStep, -airAngularClamp, airAngularClamp)
-        );
+        Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity + dW, -airAngularClamp, airAngularClamp));
       }
     }
 
@@ -389,7 +384,7 @@ function render(){
   if (!car) return;
 
   drawBodyRect(car.chassis, 120, 28);
-  drawTorso(car.torso, 18, 44);
+  drawTorso(car.torso, 18, 40);
   drawHead(car.head, 12);
   drawWheel(car.wheelA, 20);
   drawWheel(car.wheelB, 20);
@@ -433,7 +428,6 @@ function drawWheel(body, r){
   ctx.moveTo(0,0);
   ctx.lineTo(r,0);
   ctx.stroke();
-
   ctx.restore();
 }
 
@@ -451,7 +445,6 @@ function drawHead(body, r){
   ctx.beginPath();
   ctx.arc(2,-2,r*0.55, -0.2, Math.PI*1.1);
   ctx.fill();
-
   ctx.restore();
 }
 
