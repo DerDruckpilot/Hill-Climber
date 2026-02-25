@@ -1,14 +1,17 @@
 
-/* Mini Hill Climb – BUILD B007
-   Tweaks:
-   - Driver torso moved forward and lower; lighter mass => better center of gravity
-   - Air control reduced + scaled by dt (less "spin like crazy")
+/* Mini Hill Climb – BUILD B008
+   - Uses pixel-art sprites from ./assets/
+     Karosserie.png, Rad.png, Koerper.png, Kopf.png
+   - Fallback to simple shapes if sprites not loaded yet.
 */
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d", { alpha: false });
+
+// Pixel look: don't blur sprites
+ctx.imageSmoothingEnabled = false;
 
 const uiSpeed = document.getElementById("speed");
 const uiFuel  = document.getElementById("fuel");
@@ -28,6 +31,7 @@ function resize() {
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
 }
 window.addEventListener("resize", resize);
 resize();
@@ -39,6 +43,38 @@ const engine = Engine.create();
 engine.gravity.y = 1.2;
 const world = engine.world;
 
+// -------- Sprites --------
+const SPRITES = {
+  body: { path: "./assets/Karosserie.png", img: null, ok:false },
+  wheel:{ path: "./assets/Rad.png",        img: null, ok:false },
+  torso:{ path: "./assets/Koerper.png",    img: null, ok:false },
+  head: { path: "./assets/Kopf.png",       img: null, ok:false },
+};
+let spritesReady = false;
+
+function loadImage(path){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ ok:true, img });
+    img.onerror = () => resolve({ ok:false, img:null });
+    img.src = path;
+  });
+}
+
+async function loadSprites(){
+  const keys = Object.keys(SPRITES);
+  const results = await Promise.all(keys.map(k => loadImage(SPRITES[k].path)));
+  results.forEach((r, i) => {
+    const k = keys[i];
+    SPRITES[k].ok = r.ok;
+    SPRITES[k].img = r.img;
+  });
+  spritesReady = keys.every(k => SPRITES[k].ok);
+  // Even if not all loaded, we still run with fallbacks.
+}
+
+loadSprites();
+
 // -------- Params --------
 let fuel = 1.0;
 const fuelDrainPerSec = 0.008;
@@ -47,8 +83,8 @@ const motorTorque = 0.0025;
 const maxAngular  = 0.45;
 
 // Air control (dt-scaled)
-const airAngularPerSec = 0.55;   // rad/s^2-ish feel (applied as angularVel delta)
-const airAngularClamp  = 0.55;   // cap
+const airAngularPerSec = 0.55;
+const airAngularClamp  = 0.55;
 
 const terrainStep = 28;
 const terrainAmp  = 120;
@@ -180,17 +216,16 @@ function createCar(x){
     damping: 0.15
   });
 
-  // Driver placement tweak:
-  // Previously: x-18, y-30 (too far back/high). Now: slightly forward (x+2) and lower (y-18).
+  // driver placement (B007)
   const torso = Bodies.rectangle(x + 2, spawnY - 18, 18, 40, {
-    density: 0.0006,   // lighter => less rear-lift
+    density: 0.0006,
     friction: 0.2,
     label: "TORSO"
   });
 
   const torsoMount = Constraint.create({
     bodyA: chassis,
-    pointA: { x: 6, y:-10 },  // forward mount point
+    pointA: { x: 6, y:-10 },
     bodyB: torso,
     pointB: { x:0, y: 16 },
     length: 2,
@@ -329,7 +364,6 @@ function step(ts){
 
     if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
 
-    // Ground drive
     if (fuel > 0 && input.gas){
       Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
       Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
@@ -339,7 +373,6 @@ function step(ts){
       Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
     }
 
-    // Air control (scaled by dt and capped)
     const airborne = wheelGroundContacts === 0;
     if (airborne){
       const dW = airAngularPerSec * dt;
@@ -363,14 +396,25 @@ function step(ts){
   requestAnimationFrame(step);
 }
 
+// -------- Render helpers --------
 function worldToScreen(p){
   return { x: (p.x - camera.x), y: (p.y - camera.y) };
+}
+
+function drawSpriteCenteredRot(img, x, y, w, h, angle){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  // Draw image into desired size (pixel-art; smoothing disabled)
+  ctx.drawImage(img, -w/2, -h/2, w, h);
+  ctx.restore();
 }
 
 function render(){
   ctx.fillStyle = "#0b0f1a";
   ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
 
+  // terrain line
   ctx.strokeStyle = "rgba(255,255,255,0.40)";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -383,11 +427,38 @@ function render(){
 
   if (!car) return;
 
-  drawBodyRect(car.chassis, 120, 28);
-  drawTorso(car.torso, 18, 40);
-  drawHead(car.head, 12);
-  drawWheel(car.wheelA, 20);
-  drawWheel(car.wheelB, 20);
+  // Car sprites (fallback to shapes if missing)
+  const cp = worldToScreen(car.chassis.position);
+  const wpA = worldToScreen(car.wheelA.position);
+  const wpB = worldToScreen(car.wheelB.position);
+  const tp = worldToScreen(car.torso.position);
+  const hp = worldToScreen(car.head.position);
+
+  // IMPORTANT: sizes must match physics sizes
+  const chassisW = 120, chassisH = 28;
+  const wheelD = 40;
+  const torsoW = 18, torsoH = 40;
+  const headD = 24;
+
+  // Body (Karosserie)
+  if (SPRITES.body.ok) drawSpriteCenteredRot(SPRITES.body.img, cp.x, cp.y, chassisW, chassisH, car.chassis.angle);
+  else drawBodyRect(car.chassis, chassisW, chassisH);
+
+  // Torso / Head
+  if (SPRITES.torso.ok) drawSpriteCenteredRot(SPRITES.torso.img, tp.x, tp.y, torsoW, torsoH, car.torso.angle);
+  else drawTorso(car.torso, torsoW, torsoH);
+
+  if (SPRITES.head.ok) drawSpriteCenteredRot(SPRITES.head.img, hp.x, hp.y, headD, headD, car.head.angle);
+  else drawHead(car.head, headD/2);
+
+  // Wheels
+  if (SPRITES.wheel.ok) {
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle);
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle);
+  } else {
+    drawWheel(car.wheelA, wheelD/2);
+    drawWheel(car.wheelB, wheelD/2);
+  }
 }
 
 function drawBodyRect(body, w, h){
@@ -399,7 +470,6 @@ function drawBodyRect(body, w, h){
   ctx.fillRect(-w/2, -h/2, w, h);
   ctx.restore();
 }
-
 function drawTorso(body, w, h){
   const p = worldToScreen(body.position);
   ctx.save();
@@ -407,11 +477,8 @@ function drawTorso(body, w, h){
   ctx.rotate(body.angle);
   ctx.fillStyle = "rgba(233,238,252,0.92)";
   ctx.fillRect(-w/2, -h/2, w, h);
-  ctx.fillStyle = "rgba(0,0,0,0.12)";
-  ctx.fillRect(-w/2, -h/2 + 8, w, 6);
   ctx.restore();
 }
-
 function drawWheel(body, r){
   const p = worldToScreen(body.position);
   ctx.save();
@@ -421,33 +488,20 @@ function drawWheel(body, r){
   ctx.arc(0,0,r,0,Math.PI*2);
   ctx.fillStyle = "#e9eefc";
   ctx.fill();
-
-  ctx.strokeStyle = "rgba(0,0,0,0.20)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0,0);
-  ctx.lineTo(r,0);
-  ctx.stroke();
   ctx.restore();
 }
-
 function drawHead(body, r){
   const p = worldToScreen(body.position);
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(body.angle);
   ctx.beginPath();
   ctx.arc(0,0,r,0,Math.PI*2);
   ctx.fillStyle = "rgba(233,238,252,0.92)";
   ctx.fill();
-
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.beginPath();
-  ctx.arc(2,-2,r*0.55, -0.2, Math.PI*1.1);
-  ctx.fill();
   ctx.restore();
 }
 
+// -------- HUD --------
 function updateHUD(){
   if (!car || state !== STATE.PLAY){
     uiSpeed.textContent = `0 km/h`;
