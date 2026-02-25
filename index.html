@@ -6,13 +6,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0b0f1a" />
-  <link rel="manifest" href="manifest.json?v=B010" />
-  <link rel="stylesheet" href="style.css?v=B010" />
+  <link rel="manifest" href="manifest.json?v=B023" />
+  <link rel="stylesheet" href="style.css?v=B023" />
   <title>Mini Hill Climb</title>
+  <style>
+    #build-badge{position:fixed;top:10px;right:10px;z-index:10001;background:rgba(0,0,0,.55);color:#fff;
+      padding:6px 10px;border-radius:10px;font:12px system-ui,-apple-system;backdrop-filter: blur(6px);}
+    #build-badge .dim{opacity:.7}
+  </style>
 </head>
 <body>
 
-  <div id="build-badge">BUILD B022</div>
+  <div id="build-badge">
+    <div><span class="dim">HTML:</span> <span id="buildHtml">BUILD B023</span></div>
+    <div><span class="dim">JS:</span> <span id="buildJs">LOADING…</span></div>
+  </div>
 
   <div id="hud">
     <div class="chip" id="speed">0 km/h</div>
@@ -27,42 +35,51 @@
     <button id="gas" aria-label="Gas">⟲</button>
   </div>
 
-  <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü">
+  <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü" style="z-index:10000">
     <div class="panel">
       <div class="title">Mini Hill Climb</div>
-      <div class="subtitle">Tippe auf Start</div>
+      <div class="subtitle" id="menuSub">Tippe auf Start</div>
       <button id="btnStart" class="primary">Start</button>
-      <div class="hint">Gas: rechts · Rückwärts: links · In der Luft kippen mit Gas/Bremse</div>
+      <div class="hint">Debug: wenn JS läuft, steht oben rechts bei „JS:“ eine Build-Nummer.</div>
     </div>
   </div>
 
-  <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over">
+  <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over" style="z-index:10000">
     <div class="panel">
       <div class="title">Game Over</div>
-      <div class="subtitle" id="goReason">Kopf berührt</div>
+      <div class="subtitle" id="goReason">—</div>
       <button id="btnBack" class="primary">Zurück zum Menü</button>
     </div>
   </div>
 
+  <script>
+    (function(){
+      const btn = document.getElementById("btnStart");
+      const sub = document.getElementById("menuSub");
+      const set = (t)=>{ try{ sub.textContent=t; }catch(e){} };
+      const h = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){}
+        set("START geklickt (Fallback in index.html) …");
+      };
+      ["pointerdown","touchstart","click"].forEach(ev=>btn.addEventListener(ev,h,{passive:false}));
+      setTimeout(()=>{
+        const js = document.getElementById("buildJs");
+        if (js && js.textContent === "LOADING…") set("game.js wurde nicht ausgeführt (siehe JS-Status oben rechts)");
+      }, 2000);
+    })();
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
-  <script src="game.js?v=B022"></script>
+  <script src="game.js?v=B023"></script>
 
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
         try {
-          const reg = await navigator.serviceWorker.register("./sw.js?v=B022");
+          const reg = await navigator.serviceWorker.register("./sw.js?v=B023");
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-          reg.addEventListener("updatefound", () => {
-            const nw = reg.installing;
-            if (!nw) return;
-            nw.addEventListener("statechange", () => {
-              if (nw.state === "installed" && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-            });
-          });
-          setInterval(() => { try { reg.update(); } catch {} }, 60000);
+          setInterval(() => { try { reg.update(); } catch(e) {} }, 60000);
           navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
-        } catch {}
+        } catch(e) {}
       });
     }
   </script>
