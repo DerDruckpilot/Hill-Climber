@@ -1,26 +1,19 @@
-/* Hill-Climber Service Worker – B023 */
-const CACHE = "hillclimber-B023";
+/* Hill-Climber Service Worker – B024 */
+const CACHE = "hillclimber-B024";
+const CORE = ["./","./index.html","./style.css","./game.js","./manifest.json","./sw.js"];
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll([
-      "./",
-      "./index.html",
-      "./style.css",
-      "./manifest.json",
-      "./assets/Karosserie.PNG",
-      "./assets/Rad.PNG",
-      "./assets/Koerper.PNG",
-      "./assets/Kopf.PNG",
-    ])).catch(()=>{})
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(CORE);
+    self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => (k === CACHE) ? null : caches.delete(k)));
+    await Promise.all(keys.map(k => (k.startsWith("hillclimber-") && k !== CACHE) ? caches.delete(k) : Promise.resolve()));
     await self.clients.claim();
   })());
 });
@@ -29,45 +22,35 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
-function isNetworkFirst(url) {
-  return url.pathname.endsWith("/index.html") ||
-         url.pathname.endsWith("/game.js") ||
-         url.pathname.endsWith("/style.css") ||
-         url.pathname.endsWith("/manifest.json") ||
-         url.pathname === new URL(self.registration.scope).pathname ||
-         url.pathname.endsWith("/");
-}
-
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== location.origin) return;
 
-  if (isNetworkFirst(url)) {
+  if (req.mode === "navigate") {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(req, { cache: "no-store" });
+        const fresh = await fetch(req);
         const cache = await caches.open(CACHE);
-        cache.put(req, fresh.clone());
+        cache.put("./index.html", fresh.clone());
         return fresh;
-      } catch (e) {
-        const cached = await caches.match(req, { ignoreSearch: false });
-        return cached || caches.match("./index.html") || Response.error();
+      } catch {
+        const cache = await caches.open(CACHE);
+        return (await cache.match("./index.html")) || (await cache.match("./")) || Response.error();
       }
     })());
     return;
   }
 
   event.respondWith((async () => {
-    const cached = await caches.match(req, { ignoreSearch: false });
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(req);
     if (cached) return cached;
     try {
       const fresh = await fetch(req);
-      const cache = await caches.open(CACHE);
       cache.put(req, fresh.clone());
       return fresh;
-    } catch (e) {
+    } catch {
       return cached || Response.error();
     }
   })());
