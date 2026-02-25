@@ -1,11 +1,11 @@
 
-/* Mini Hill Climb – BUILD B017
+/* Mini Hill Climb – BUILD B018
    - Sprite sizes/offsets tuned so graphics match physics better.
    - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
    - Keeps debug sprite status lines.
 */
 
-window.__BUILD__ = "BUILD B017";
+window.__BUILD__ = "BUILD B018";
 
 const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
@@ -222,75 +222,57 @@ let wheelGroundContacts = 0;
 
 function createCar(x){
   const groundY = heightAtX(x);
-  const spawnY = groundY - 52;
+  const spawnY = groundY - 58;
 
   const chassis = Bodies.rectangle(x, spawnY, 120, 28, {
     density: 0.003,
-    friction: 0.6,
+    friction: 0.7,
+    frictionAir: 0.02,
     label: "CHASSIS"
   });
 
   const wheelA = Bodies.circle(x - 34, spawnY + 22, 20, {
     density: 0.002,
-    friction: 1.2,
+    friction: 1.4,
+    frictionAir: 0.02,
     label: "WHEEL"
   });
   const wheelB = Bodies.circle(x + 34, spawnY + 22, 20, {
     density: 0.002,
-    friction: 1.2,
+    friction: 1.4,
+    frictionAir: 0.02,
     label: "WHEEL"
   });
 
   const suspA = Constraint.create({
-    bodyA: chassis,
-    pointA: { x:-34, y: 18 },
-    bodyB: wheelA,
-    length: 22,
-    stiffness: 0.45,
-    damping: 0.15
+    bodyA: chassis, pointA: { x: -34, y: 14 },
+    bodyB: wheelA,  pointB: { x: 0,   y: 0  },
+    length: 14, stiffness: 0.9, damping: 0.25
   });
   const suspB = Constraint.create({
-    bodyA: chassis,
-    pointA: { x: 34, y: 18 },
-    bodyB: wheelB,
-    length: 22,
-    stiffness: 0.45,
-    damping: 0.15
+    bodyA: chassis, pointA: { x:  34, y: 14 },
+    bodyB: wheelB,  pointB: { x: 0,   y: 0  },
+    length: 14, stiffness: 0.9, damping: 0.25
   });
 
-  const torso = Bodies.rectangle(x - 10, spawnY + 6, 18, 40, {
-    density: 0.0006,
-    friction: 0.2,
-    label: "TORSO"
-  });
-
-  const torsoMount = Constraint.create({
-    bodyA: chassis,
-    pointA: { x: -6, y: 2 },
-    bodyB: torso,
-    pointB: { x:0, y: 16 },
-    length: 2,
-    stiffness: 1.0,
-    damping: 0.35
-  });
-
-  const head = Bodies.circle(x - 10, spawnY - 18, 12, {
+  // Physical head (sensor) with subtle wobble; torso is render-only locked to chassis.
+  const head = Bodies.circle(x - 22, spawnY - 22, 12, {
     isSensor: true,
     label: "HEAD"
   });
 
-  const neck = Constraint.create({
-    bodyA: torso,
-    pointA: { x:0, y:-14 },
+  const headMount = Constraint.create({
+    bodyA: chassis,
+    pointA: { x: -22, y: -18 },   // seated driver head anchor
     bodyB: head,
-    pointB: { x:0, y: 0 },
-    length: 1,
-    stiffness: 1.0,
-    damping: 0.5
+    pointB: { x: 0, y: 0 },
+    length: 3,
+    stiffness: 0.85,
+    damping: 0.6
   });
 
-  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck]);
-  return { chassis, wheelA, wheelB, suspA, suspB, torso, torsoMount, head, neck };
+  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, head, headMount]);
+  return { chassis, wheelA, wheelB, suspA, suspB, head, headMount };
 }
 
 function isWheel(body){ return body && body.label === "WHEEL"; }
@@ -445,11 +427,7 @@ function render(){
   if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x,  cp.y,  chassisW, chassisH, car.chassis.angle, VIS.chassisOff);
 
   // Render-only torso locked to chassis (no physics body)
-  if (SPRITES.torso.ok){
-    const torsoAnchor = { x: cp.x, y: cp.y };
-    // seat position relative to chassis art
-    drawSpriteCenteredRot(SPRITES.torso.img, torsoAnchor.x, torsoAnchor.y, VIS.torsoW, VIS.torsoH, car.chassis.angle, VIS.torsoOff);
-  }
+    }
   if (SPRITES.wheel.ok){
     drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle, VIS.wheelOff);
     drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle, VIS.wheelOff);
