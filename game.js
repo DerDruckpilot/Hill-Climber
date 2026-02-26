@@ -1,334 +1,475 @@
-/* Mini Hill Climb – BUILD B025 */
-(() => {
-  const BUILD = "B025";
-  const $ = (id) => document.getElementById(id);
 
-  const buildJs = $("buildJs");
-  if (buildJs) buildJs.textContent = "BUILD " + BUILD + " · JS OK";
+/* Mini Hill Climb – BUILD B026
+   - Sprite sizes/offsets tuned so graphics match physics better.
+   - Uses .PNG assets in /assets (case-sensitive on GitHub Pages)
+   - Keeps debug sprite status lines.
+*/
 
-  const canvas = $("c");
-  const ctx = canvas.getContext("2d");
+window.__BUILD__ = "BUILD B026";
 
-  const hudSpeed = $("speed");
-  const hudFuel  = $("fuel");
-  const hudDist  = $("dist");
+const { Engine, World, Bodies, Body, Constraint, Events } = Matter;
 
-  const menu = $("menu");
-  const btnStart = $("btnStart");
-  const gameover = $("gameover");
-  const btnBack = $("btnBack");
-  const goReason = $("goReason");
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d", { alpha: false });
+ctx.imageSmoothingEnabled = false;
 
-  const btnGas = $("gas");
-  const btnBrake = $("brake");
+const uiSpeed = document.getElementById("speed");
+const uiFuel  = document.getElementById("fuel");
+const uiDist  = document.getElementById("dist");
+const uiBuild = document.getElementById("build");
+if (uiBuild) uiBuild.textContent = window.__BUILD__;
 
-  function resize() {
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    canvas.width  = Math.floor(window.innerWidth * dpr);
-    canvas.height = Math.floor(window.innerHeight * dpr);
-    canvas.style.width = window.innerWidth + "px";
-    canvas.style.height = window.innerHeight + "px";
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-  window.addEventListener("resize", resize, {passive:true});
-  resize();
 
-  const { Engine, World, Bodies, Body, Constraint, Composite, Vector } = Matter;
+const menuEl = document.getElementById("menu");
+const gameOverEl = document.getElementById("gameover");
+const goReasonEl = document.getElementById("goReason");
+const btnStart = document.getElementById("btnStart");
+const btnBack  = document.getElementById("btnBack");
 
-  let engine, world;
-  let terrain = [];
-  let car = null;
-  let running = false;
+function show(el){ el.classList.add("is-visible"); }
+function hide(el){ el.classList.remove("is-visible"); }
 
-  let camX = 0, camY = 0;
-  const gndY = 520;
+function resize() {
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener("resize", resize);
+resize();
 
-  const input = { gas:false, brake:false };
+const STATE = { MENU:"menu", PLAY:"play", GAMEOVER:"gameover" };
+let state = STATE.MENU;
 
-  function bindHold(btn, key) {
-    const down = (e) => { e.preventDefault(); e.stopPropagation(); input[key]=true; };
-    const up   = (e) => { e.preventDefault(); e.stopPropagation(); input[key]=false; };
-    ["pointerdown","touchstart"].forEach(ev => btn.addEventListener(ev, down, {passive:false}));
-    ["pointerup","pointercancel","touchend","touchcancel","pointerleave"].forEach(ev => btn.addEventListener(ev, up, {passive:false}));
-  }
-  bindHold(btnGas, "gas");
-  bindHold(btnBrake, "brake");
-  document.addEventListener("touchstart", (e)=>{ if (e.target === btnGas || e.target === btnBrake) e.preventDefault(); }, {passive:false});
+const engine = Engine.create();
+engine.gravity.y = 1.2;
+const world = engine.world;
 
-  function loadImg(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Image load failed: " + src));
-      img.src = src;
-    });
-  }
-  const ASSETS = {
-    body: "assets/Karosserie.PNG",
-    wheel: "assets/Rad.PNG",
-    torso: "assets/Koerper.PNG",
-    head: "assets/Kopf.PNG",
-  };
-  let IMG = null;
+// -------- Sprites (robust) --------
+const SPRITES = {
+  body:  { img:null, ok:false, loadedFrom:null },
+  wheel: { img:null, ok:false, loadedFrom:null },
+  torso: { img:null, ok:false, loadedFrom:null },
+  head:  { img:null, ok:false, loadedFrom:null },
+};
 
-  function resetTerrain() {
-    terrain.forEach(b => World.remove(world, b));
-    terrain = [];
-    let x = -200;
-    let y = gndY;
-    const step = 60;
-    const count = 80;
-    for (let i=0;i<count;i++) {
-      const dy = (Math.sin((i/6)) * 12) + (Math.sin((i/17)) * 22);
-      const y2 = gndY + dy;
-      const x2 = x + step;
-      const len = Math.hypot(x2-x, y2-y);
-      const ang = Math.atan2(y2-y, x2-x);
-      const seg = Bodies.rectangle((x+x2)/2, (y+y2)/2, len, 18, {
-        isStatic:true, friction:1.0, restitution:0.0, angle:ang
-      });
-      terrain.push(seg);
-      x = x2; y = y2;
-    }
-    terrain.forEach(b => World.add(world, b));
-  }
+const CANDIDATES = {
+  body:  ["assets/Karosserie.PNG","assets/Karosserie.png","./assets/Karosserie.PNG","./assets/Karosserie.png"],
+  wheel: ["assets/Rad.PNG","assets/Rad.png","./assets/Rad.PNG","./assets/Rad.png"],
+  torso: ["assets/Koerper.PNG","assets/Koerper.png","./assets/Koerper.PNG","./assets/Koerper.png"],
+  head:  ["assets/Kopf.PNG","assets/Kopf.png","./assets/Kopf.PNG","./assets/Kopf.png"],
+};
 
-  function createCar(x, y) {
-    const chassis = Bodies.rectangle(x, y, 140, 28, {
-      friction: 0.9, frictionAir: 0.02, restitution: 0.0, density: 0.002
-    });
-    const wheelR = 22;
-    const wheelA = Bodies.circle(x-48, y+22, wheelR, { friction: 1.5, restitution: 0.0, density: 0.001 });
-    const wheelB = Bodies.circle(x+48, y+22, wheelR, { friction: 1.5, restitution: 0.0, density: 0.001 });
+function loadImage(path){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ ok:true, img, path });
+    img.onerror = () => resolve({ ok:false, img:null, path });
+    img.src = path;
+  });
+}
 
-    const axA = Constraint.create({ bodyA: chassis, pointA: {x:-48, y: 18}, bodyB: wheelA, length: 0, stiffness: 0.9 });
-    const axB = Constraint.create({ bodyA: chassis, pointA: {x: 48, y: 18}, bodyB: wheelB, length: 0, stiffness: 0.9 });
-
-    const head = Bodies.circle(x-10, y-44, 10, {
-      density: 0.0006, frictionAir: 0.03, restitution: 0.0,
-      collisionFilter: { group: -1 }
-    });
-    const neck = Constraint.create({
-      bodyA: chassis, pointA: {x:-8, y:-16},
-      bodyB: head, pointB: {x:0, y:0},
-      length: 18, stiffness: 0.35, damping: 0.12
-    });
-
-    const comp = Composite.create();
-    Composite.add(comp, [chassis, wheelA, wheelB, axA, axB, head, neck]);
-    World.add(world, comp);
-
-    return {
-      comp, chassis, wheelA, wheelB, head, wheelR,
-      spriteScale: 0.52,
-      torsoOffset: {x:-18, y:-56},
-      headScale: 0.56,
-      fuel: 100,
-      dist: 0,
-      lastX: x,
-    };
-  }
-
-  function isAirborne() {
-    const y = car.chassis.position.y;
-    return y < gndY - 60;
-  }
-
-  function applyDrive(dt) {
-    if (!car) return;
-    const gas = input.gas ? 1 : 0;
-    const brake = input.brake ? 1 : 0;
-    if (running && (gas || brake)) car.fuel = Math.max(0, car.fuel - 0.012 * (gas+brake) * dt);
-
-    const wheelTorque = 0.0018;
-    const maxAng = 0.55;
-    if (car.fuel <= 0) return;
-
-    if (gas) {
-      Body.setAngularVelocity(car.wheelA, Math.max(-maxAng, car.wheelA.angularVelocity - wheelTorque*dt));
-      Body.setAngularVelocity(car.wheelB, Math.max(-maxAng, car.wheelB.angularVelocity - wheelTorque*dt));
-    }
-    if (brake) {
-      Body.setAngularVelocity(car.wheelA, Math.min(maxAng, car.wheelA.angularVelocity + wheelTorque*dt));
-      Body.setAngularVelocity(car.wheelB, Math.min(maxAng, car.wheelB.angularVelocity + wheelTorque*dt));
-    }
-
-    if (isAirborne()) {
-      const airTorque = 0.0009;
-      if (gas) Body.setAngularVelocity(car.chassis, car.chassis.angularVelocity + airTorque*dt);
-      if (brake) Body.setAngularVelocity(car.chassis, car.chassis.angularVelocity - airTorque*dt);
+async function loadSprite(key){
+  for (const p of (CANDIDATES[key] || [])){
+    const r = await loadImage(p);
+    if (r.ok){
+      SPRITES[key].ok = true;
+      SPRITES[key].img = r.img;
+      SPRITES[key].loadedFrom = p;
+      return true;
     }
   }
+  return false;
+}
 
-  function updateHUD() {
-    if (!car) return;
-    const vx = car.chassis.velocity.x;
-    const kmh = Math.max(0, Math.round(Math.abs(vx) * 3.6 * 2.2));
-    hudSpeed.textContent = kmh + " km/h";
-    hudFuel.textContent = "Fuel: " + Math.round(car.fuel) + "%";
-    hudDist.textContent = Math.max(0, Math.round(car.dist)) + " m";
+async function loadAllSprites(){
+  await Promise.all(Object.keys(SPRITES).map(k => loadSprite(k)));
+}
+loadAllSprites();
+
+function drawSpriteStatus(){
+  ctx.save();
+  ctx.font = "12px system-ui, -apple-system";
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  const lines = [
+    `body: ${SPRITES.body.ok ? "OK" : "MISS"}${SPRITES.body.loadedFrom ? " ("+SPRITES.body.loadedFrom+")" : ""}`,
+    `wheel: ${SPRITES.wheel.ok ? "OK" : "MISS"}${SPRITES.wheel.loadedFrom ? " ("+SPRITES.wheel.loadedFrom+")" : ""}`,
+    `torso: ${SPRITES.torso.ok ? "OK" : "MISS"}${SPRITES.torso.loadedFrom ? " ("+SPRITES.torso.loadedFrom+")" : ""}`,
+    `head: ${SPRITES.head.ok ? "OK" : "MISS"}${SPRITES.head.loadedFrom ? " ("+SPRITES.head.loadedFrom+")" : ""}`,
+  ];
+  let y = 58;
+  for (const ln of lines){ ctx.fillText(ln, 12, y); y += 14; }
+  ctx.restore();
+}
+
+// -------- Visual tuning (sprites vs physics) --------
+// Physics bodies keep their sizes; sprites are drawn with these VISUAL sizes.
+const VIS = {
+  chassisW: 210, chassisH: 112,     // taller body (was 56)
+  wheelD: 64,
+  torsoW: 44, torsoH: 72,
+  headD: 46,
+  chassisOff: { x: 0, y: -22 },    // lift art a bit (taller sprite)
+  wheelOff:   { x: 0, y: -6 },
+  torsoOff:   { x: -10, y: 26 },   // push driver down into the car
+  headOff:    { x: -10, y: 18 },
+};
+
+// -------- Params --------
+let fuel = 1.0;
+const fuelDrainPerSec = 0.008;
+
+const motorTorque = 0.0025;
+const maxAngular  = 0.45;
+
+const airAngularPerSec = 0.55;
+const airAngularClamp  = 0.55;
+
+const terrainStep = 28;
+const terrainAmp  = 120;
+const terrainBase = 320;
+const segmentThickness = 26;
+
+const camera = { x: 0, y: 0 };
+const input = { gas:false, brake:false };
+
+function bindHold(btn, prop) {
+  const down = (e) => { e.preventDefault(); input[prop]=true; };
+  const up   = (e) => { e.preventDefault(); input[prop]=false; };
+  btn.addEventListener("pointerdown", down);
+  btn.addEventListener("pointerup", up);
+  btn.addEventListener("pointercancel", up);
+  btn.addEventListener("pointerleave", up);
+}
+bindHold(document.getElementById("gas"), "gas");
+bindHold(document.getElementById("brake"), "brake");
+document.addEventListener("touchmove", (e)=>e.preventDefault(), { passive:false });
+
+// -------- Terrain --------
+let terrainPoints = [];
+let terrainBodies = [];
+let seed = 1337;
+
+function noise1D(t){
+  const x = Math.sin(t * 12.9898 + seed) * 43758.5453;
+  return x - Math.floor(x);
+}
+function smoothNoise(t){
+  const i = Math.floor(t);
+  const f = t - i;
+  const a = noise1D(i);
+  const b = noise1D(i+1);
+  const u = f*f*(3-2*f);
+  return a*(1-u) + b*u;
+}
+function heightAtX(x){
+  const n = smoothNoise(x/260);
+  const n2 = smoothNoise(x/90) * 0.35;
+  return terrainBase + (n*2-1)*terrainAmp + (n2*2-1)*terrainAmp*0.35;
+}
+
+function addTerrainSegment(p1, p2){
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy);
+  const mid = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+  const ang = Math.atan2(dy, dx);
+
+  const body = Bodies.rectangle(mid.x, mid.y, len+6, segmentThickness+14, {
+    isStatic: true,
+    friction: 1.0,
+    label: "GROUND"
+  });
+  Body.setAngle(body, ang);
+
+  terrainBodies.push(body);
+  World.add(world, body);
+}
+
+function ensureTerrainUntil(xMax, doCleanup = true){
+  if (terrainPoints.length === 0){
+    terrainPoints.push({ x:-400, y: heightAtX(-400) });
+    terrainPoints.push({ x:0, y: heightAtX(0) });
+    addTerrainSegment(terrainPoints[0], terrainPoints[1]);
   }
 
-  function setVisible(el, on) {
-    if (!el) return;
-    el.classList.toggle("is-visible", !!on);
+  while (terrainPoints[terrainPoints.length-1].x < xMax){
+    const last = terrainPoints[terrainPoints.length-1];
+    const nx = last.x + terrainStep;
+    const ny = heightAtX(nx);
+    const np = { x:nx, y:ny };
+    terrainPoints.push(np);
+    addTerrainSegment(last, np);
   }
 
-  function gameOver(reason="Kopf berührt") {
-    running = false;
-    setVisible(gameover, true);
-    if (goReason) goReason.textContent = reason;
+  if (!doCleanup) return;
+
+  const cutoff = camera.x - 1200;
+  while (terrainPoints.length > 6 && terrainPoints[1].x < cutoff){
+    terrainPoints.shift();
+    const b = terrainBodies.shift();
+    if (b) World.remove(world, b);
   }
+}
 
-  function resetGame() {
-    engine = Engine.create();
-    engine.gravity.y = 1.15;
-    world = engine.world;
+// -------- Car + Driver --------
+let car = null;
+let distanceStartX = 0;
+let wheelGroundContacts = 0;
 
-    resetTerrain();
-    car = createCar(0, gndY - 80);
+function createCar(x){
+  const groundY = heightAtX(x);
+  const spawnY = groundY - 52;
 
-    camX = 0; camY = 0;
-    running = true;
-    setVisible(gameover, false);
-  }
+  // Put car parts into one non-colliding group (so they don't bump each other)
+  const group = Body.nextGroup(true);
 
-  function worldToScreen(p) {
-    return { x: p.x - camX + window.innerWidth*0.35, y: p.y - camY + window.innerHeight*0.55 };
-  }
-
-  function drawTerrain() {
-    ctx.save();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(220,220,220,0.55)";
-    ctx.beginPath();
-    for (let i=0;i<terrain.length;i++) {
-      const b = terrain[i];
-      const v = b.vertices;
-      const p1 = worldToScreen(v[0]);
-      const p2 = worldToScreen(v[1]);
-      if (i===0) ctx.moveTo(p1.x,p1.y);
-      ctx.lineTo(p2.x,p2.y);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawSprite(img, x, y, w, h, angle=0, alpha=1) {
-    if (!img) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, -w/2, -h/2, w, h);
-    ctx.restore();
-  }
-
-  function drawCar() {
-    if (!car || !IMG) return;
-
-    const ch = car.chassis;
-    const wA = car.wheelA;
-    const wB = car.wheelB;
-
-    const spCh = worldToScreen(ch.position);
-    const spA = worldToScreen(wA.position);
-    const spB = worldToScreen(wB.position);
-
-    const wheelSize = car.wheelR*2 * 1.65;
-    drawSprite(IMG.wheel, spA.x, spA.y, wheelSize, wheelSize, wA.angle);
-    drawSprite(IMG.wheel, spB.x, spB.y, wheelSize, wheelSize, wB.angle);
-
-    const bodyW = 260 * car.spriteScale;
-    const bodyH = 120 * car.spriteScale;
-    drawSprite(IMG.body, spCh.x, spCh.y - 18, bodyW, bodyH, ch.angle);
-
-    const off = car.torsoOffset;
-    const local = Vector.rotate({x:off.x, y:off.y}, ch.angle);
-    const tp = worldToScreen({x: ch.position.x + local.x, y: ch.position.y + local.y});
-    const torsoW = 120 * car.spriteScale;
-    const torsoH = 150 * car.spriteScale;
-    drawSprite(IMG.torso, tp.x, tp.y, torsoW, torsoH, ch.angle);
-
-    const hp = car.head.position;
-    const seatLocal = Vector.rotate({x: -6, y: -46}, ch.angle);
-    const seatWorld = {x: ch.position.x + seatLocal.x, y: ch.position.y + seatLocal.y};
-    const blend = 0.35;
-    const hx = hp.x*(1-blend) + seatWorld.x*blend;
-    const hy = hp.y*(1-blend) + seatWorld.y*blend;
-
-    const shp = worldToScreen({x:hx, y:hy});
-    const headW = 80 * car.headScale;
-    const headH = 80 * car.headScale;
-    drawSprite(IMG.head, shp.x, shp.y, headW, headH, ch.angle*0.15);
-  }
-
-  function render() {
-    ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
-    drawTerrain();
-    drawCar();
-  }
-
-  let last = performance.now();
-  function tick(now) {
-    const dtMs = Math.min(33, now - last);
-    last = now;
-    const dt = dtMs / 16.666;
-
-    if (running) {
-      applyDrive(dt);
-      Engine.update(engine, dtMs);
-
-      camX = car.chassis.position.x;
-      camY = car.chassis.position.y - 80;
-
-      const dx = car.chassis.position.x - car.lastX;
-      if (dx > 0) car.dist += dx * 0.02;
-      car.lastX = car.chassis.position.x;
-
-      if (car.head.position.y > car.chassis.position.y + 48) {
-        gameOver("Kopf berührt");
-      }
-      updateHUD();
-    }
-
-    render();
-    requestAnimationFrame(tick);
-  }
-
-  function startGame() {
-    setVisible(menu, false);
-    resetGame();
-  }
-  function backToMenu() {
-    running = false;
-    setVisible(gameover, false);
-    setVisible(menu, true);
-  }
-
-  ["pointerdown","touchstart","click"].forEach(ev => {
-    btnStart.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); startGame(); }, {passive:false});
-    btnBack.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); backToMenu(); }, {passive:false});
+  const chassis = Bodies.rectangle(x, spawnY, 120, 28, {
+    density: 0.003,
+    friction: 0.6,
+    label: "CHASSIS",
+    collisionFilter: { group }
   });
 
-  (async () => {
-    const [body,wheel,torso,head] = await Promise.all([
-      loadImg(ASSETS.body),
-      loadImg(ASSETS.wheel),
-      loadImg(ASSETS.torso),
-      loadImg(ASSETS.head),
-    ]);
-    IMG = {body,wheel,torso,head};
+  const wheelA = Bodies.circle(x - 34, spawnY + 22, 20, {
+    density: 0.002,
+    friction: 1.2,
+    label: "WHEEL",
+    collisionFilter: { group }
+  });
+  const wheelB = Bodies.circle(x + 34, spawnY + 22, 20, {
+    density: 0.002,
+    friction: 1.2,
+    label: "WHEEL",
+    collisionFilter: { group }
+  });
 
-    engine = Engine.create();
-    engine.gravity.y = 1.15;
-    world = engine.world;
-    resetTerrain();
-    car = createCar(0, gndY - 80);
-    running = false;
+  const suspA = Constraint.create({
+    bodyA: chassis,
+    pointA: { x:-34, y: 18 },
+    bodyB: wheelA,
+    length: 22,
+    stiffness: 0.45,
+    damping: 0.15
+  });
+  const suspB = Constraint.create({
+    bodyA: chassis,
+    pointA: { x: 34, y: 18 },
+    bodyB: wheelB,
+    length: 22,
+    stiffness: 0.45,
+    damping: 0.15
+  });
 
-    requestAnimationFrame(tick);
-  })();
+  // Driver torso is render-only (no physics) to avoid shifting COM.
+  // Head stays a sensor for game-over detection and is gently tethered to the chassis.
+  const head = Bodies.circle(x - 10, spawnY - 18, 12, {
+    isSensor: true,
+    label: "HEAD",
+    collisionFilter: { group },
+    frictionAir: 0.25,
+    restitution: 0.0
+  });
 
-})();
+  const neck = Constraint.create({
+    bodyA: chassis,
+    pointA: { x: -12, y: -8 }, // seat/head anchor (relative to chassis center)
+    bodyB: head,
+    pointB: { x: 0, y: 0 },
+    length: 6,
+    stiffness: 0.85,
+    damping: 0.85
+  });
+
+  World.add(world, [chassis, wheelA, wheelB, suspA, suspB, head, neck]);
+  return { chassis, wheelA, wheelB, suspA, suspB, head, neck };
+}
+
+function isWheel(body){ return body && body.label === "WHEEL"; }
+function isGround(body){ return body && body.label === "GROUND"; }
+function isHead(body){ return body && body.label === "HEAD"; }
+
+Events.on(engine, "collisionStart", (evt) => {
+  if (!car) return;
+  for (const pair of evt.pairs){
+    const a = pair.bodyA, b = pair.bodyB;
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))) wheelGroundContacts++;
+    if (state === STATE.PLAY){
+      const headHitGround = (isHead(a) && isGround(b)) || (isHead(b) && isGround(a));
+      const headHitAnyStatic = (isHead(a) && b.isStatic) || (isHead(b) && a.isStatic);
+      if (headHitGround || headHitAnyStatic){ triggerGameOver("Kopf berührt"); return; }
+    }
+  }
+});
+
+Events.on(engine, "collisionEnd", (evt) => {
+  if (!car) return;
+  for (const pair of evt.pairs){
+    const a = pair.bodyA, b = pair.bodyB;
+    if ((isWheel(a) && isGround(b)) || (isWheel(b) && isGround(a))) wheelGroundContacts = Math.max(0, wheelGroundContacts - 1);
+  }
+});
+
+function triggerGameOver(reason){
+  if (state !== STATE.PLAY) return;
+  state = STATE.GAMEOVER;
+  input.gas = false; input.brake = false;
+  goReasonEl.textContent = reason || "Game Over";
+  show(gameOverEl);
+}
+
+function resetWorld(){
+  World.clear(world, false);
+  terrainPoints = [];
+  terrainBodies = [];
+  wheelGroundContacts = 0;
+  fuel = 1.0;
+
+  const spawnX = 120;
+  const groundY = heightAtX(spawnX);
+
+  camera.x = spawnX - window.innerWidth * 0.25;
+  camera.y = groundY - window.innerHeight * 0.55;
+
+  ensureTerrainUntil(2000, false);
+  car = createCar(spawnX);
+  distanceStartX = car.chassis.position.x;
+
+  camera.x = car.chassis.position.x - window.innerWidth * 0.25;
+  camera.y = car.chassis.position.y - window.innerHeight * 0.55;
+}
+
+function startGame(){
+  hide(menuEl); hide(gameOverEl);
+  state = STATE.PLAY;
+  resetWorld();
+}
+function backToMenu(){
+  state = STATE.MENU;
+  input.gas = false; input.brake = false;
+  show(menuEl); hide(gameOverEl);
+  car = null;
+}
+
+btnStart.addEventListener("click", (e)=>{ e.preventDefault(); startGame(); });
+btnBack.addEventListener("click", (e)=>{ e.preventDefault(); backToMenu(); });
+
+show(menuEl);
+
+// -------- Loop --------
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+let lastTs = performance.now();
+
+function step(ts){
+  const dt = Math.max(0, Math.min(0.033, (ts-lastTs)/1000));
+  lastTs = ts;
+
+  if (state === STATE.PLAY && car){
+    camera.x = car.chassis.position.x - window.innerWidth * 0.25;
+    camera.y = car.chassis.position.y - window.innerHeight * 0.55;
+
+    ensureTerrainUntil(car.chassis.position.x + 1600, true);
+    if (fuel > 0) fuel = Math.max(0, fuel - fuelDrainPerSec * dt);
+
+    if (fuel > 0 && input.gas){
+      Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
+      Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity + motorTorque*120, -maxAngular, maxAngular));
+    }
+    if (input.brake){
+      Body.setAngularVelocity(car.wheelA, clamp(car.wheelA.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
+      Body.setAngularVelocity(car.wheelB, clamp(car.wheelB.angularVelocity - motorTorque*120, -maxAngular, maxAngular));
+    }
+
+    const airborne = wheelGroundContacts === 0;
+    if (airborne){
+      const dW = airAngularPerSec * dt;
+      if (input.gas)   Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity - dW, -airAngularClamp, airAngularClamp));
+      if (input.brake) Body.setAngularVelocity(car.chassis, clamp(car.chassis.angularVelocity + dW, -airAngularClamp, airAngularClamp));
+    }
+
+    Engine.update(engine, 1000/60);
+    if (fuel <= 0) triggerGameOver("Kein Fuel");
+  } else {
+    Engine.update(engine, 1000/60);
+  }
+
+  render();
+  updateHUD();
+  requestAnimationFrame(step);
+}
+
+function worldToScreen(p){ return { x: (p.x - camera.x), y: (p.y - camera.y) }; }
+
+function drawSpriteCenteredRot(img, x, y, w, h, angle, off){
+  ctx.save();
+  ctx.translate(x + (off?.x||0), y + (off?.y||0));
+  ctx.rotate(angle);
+  ctx.drawImage(img, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function render(){
+  ctx.fillStyle = "#0b0f1a";
+  ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.40)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i=0;i<terrainPoints.length;i++){
+    const s = worldToScreen(terrainPoints[i]);
+    if (i===0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+  }
+  ctx.stroke();
+
+  drawSpriteStatus();
+  if (!car) return;
+
+  const cp  = worldToScreen(car.chassis.position);
+  const wpA = worldToScreen(car.wheelA.position);
+  const wpB = worldToScreen(car.wheelB.position);
+  const hp  = worldToScreen(car.head.position);
+
+  const chassisW = VIS.chassisW, chassisH = VIS.chassisH;
+  const wheelD = VIS.wheelD;
+  const torsoW = VIS.torsoW, torsoH = VIS.torsoH;
+  const headD = VIS.headD;
+
+  if (SPRITES.body.ok)  drawSpriteCenteredRot(SPRITES.body.img,  cp.x,  cp.y,  chassisW, chassisH, car.chassis.angle, VIS.chassisOff);
+
+  // Render-only torso locked to chassis (no physics body)
+  if (SPRITES.torso.ok){
+    const torsoAnchor = { x: cp.x, y: cp.y };
+    // seat position relative to chassis art
+    drawSpriteCenteredRot(SPRITES.torso.img, torsoAnchor.x, torsoAnchor.y, VIS.torsoW, VIS.torsoH, car.chassis.angle, VIS.torsoOff);
+  }
+  if (SPRITES.wheel.ok){
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpA.x, wpA.y, wheelD, wheelD, car.wheelA.angle, VIS.wheelOff);
+    drawSpriteCenteredRot(SPRITES.wheel.img, wpB.x, wpB.y, wheelD, wheelD, car.wheelB.angle, VIS.wheelOff);
+  }
+    if (SPRITES.head.ok)  drawSpriteCenteredRot(SPRITES.head.img,  hp.x,  hp.y,  headD, headD, car.head.angle, VIS.headOff);
+}
+
+function updateHUD(){
+  if (!car || state !== STATE.PLAY){
+    uiSpeed.textContent = `0 km/h`;
+    uiFuel.textContent = `Fuel: ${Math.round(fuel*100)}%`;
+    uiDist.textContent = `0 m`;
+    return;
+  }
+  const vx = car.chassis.velocity.x;
+  const kmh = Math.round(Math.abs(vx) * 3.6 * 2.2);
+  uiSpeed.textContent = `${kmh} km/h`;
+  uiFuel.textContent = `Fuel: ${Math.round(fuel*100)}%`;
+  const dist = Math.max(0, car.chassis.position.x - distanceStartX);
+  uiDist.textContent = `${Math.round(dist/10)} m`;
+}
+
+["btnStart","btnBack","gas","brake"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("contextmenu", (e)=>e.preventDefault());
+});
+
+requestAnimationFrame(step);
