@@ -8,7 +8,7 @@ function bindTap(el, handler){
   el.addEventListener("touchend", fire, {passive:true});
   el.addEventListener("click", fire);
 }
-/* Mini Hill Climb – BUILD B031-STARTFIX
+/* Mini Hill Climb – BUILD B032-STARTQUEUE
    - Chassis + 2 wheels with constraints
    - Torso is render-only (no physics)
    - Head is sensor attached to chassis (very low wobble)
@@ -16,7 +16,7 @@ function bindTap(el, handler){
 (() => {
   "use strict";
 
-  const BUILD = "BUILD B031-STARTFIX";
+  const BUILD = "BUILD B032-STARTQUEUE";
   const $ = (id) => document.getElementById(id);
 
   // DOM
@@ -147,6 +147,9 @@ function bindTap(el, handler){
   let fuel = 100;
   let distance = 0;
   let started = false;
+let appReady = false;
+let pendingStart = false;
+
   let dead = false;
 
   // Input
@@ -420,6 +423,8 @@ function bindTap(el, handler){
       await loadAssets();
       showMenu();
       requestAnimationFrame(step);
+      appReady = true;
+      if (pendingStart) { pendingStart = false; startNow(); }
     } catch (e) {
       const t = $("fatalText");
       const f = $("fatal");
