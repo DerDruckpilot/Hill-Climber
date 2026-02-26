@@ -2,97 +2,50 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0b0f1a" />
-  <link rel="manifest" href="manifest.json?v=B025" />
-  <link rel="stylesheet" href="style.css?v=B025" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
   <title>Mini Hill Climb</title>
-  <style>
-    #build-badge{position:fixed;top:10px;right:10px;z-index:10001;background:rgba(0,0,0,.55);color:#fff;
-      padding:6px 10px;border-radius:10px;font:12px system-ui,-apple-system;backdrop-filter: blur(6px);}
-    #build-badge .dim{opacity:.7}
-    #fatal{position:fixed;left:10px;right:10px;bottom:10px;z-index:10002;max-height:45vh;overflow:auto;
-      background:rgba(0,0,0,.78);color:#fff;border-radius:14px;padding:12px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;display:none;white-space:pre-wrap;}
-  </style>
 </head>
 <body>
-
-  <div id="build-badge">
-    <div><span class="dim">HTML:</span> <span id="buildHtml">BUILD B025</span></div>
-    <div><span class="dim">JS:</span> <span id="buildJs">LOADING…</span></div>
-  </div>
-  <div id="fatal"></div>
-
-  <div id="hud">
-    <div class="chip" id="speed">0 km/h</div>
-    <div class="chip" id="fuel">Fuel: 100%</div>
-    <div class="chip" id="dist">0 m</div>
-  </div>
-
   <canvas id="c"></canvas>
 
-  <div id="controls">
-    <button id="brake" aria-label="Bremse">⟲</button>
-    <button id="gas" aria-label="Gas">⟲</button>
-  </div>
-
-  <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü" style="z-index:10000">
-    <div class="panel">
-      <div class="title">Mini Hill Climb</div>
-      <div class="subtitle" id="menuSub">Tippe auf Start</div>
-      <button id="btnStart" class="primary">Start</button>
-      <div class="hint">Gas: rechts · Rückwärts/Bremse: links · In der Luft kippen mit Gas/Bremse</div>
-    </div>
-  </div>
-
-  <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over" style="z-index:10000">
-    <div class="panel">
-      <div class="title">Game Over</div>
-      <div class="subtitle" id="goReason">—</div>
-      <button id="btnBack" class="primary">Zurück zum Menü</button>
-    </div>
-  </div>
-
-  <script>
-    (function(){
-      const fatal = document.getElementById("fatal");
-      const buildJs = document.getElementById("buildJs");
-      const sub = document.getElementById("menuSub");
-      function show(msg){
-        try{
-          if (fatal){ fatal.style.display="block"; fatal.textContent = msg; }
-          if (buildJs) buildJs.textContent = "JS ERROR";
-          if (sub) sub.textContent = "JS Fehler – siehe Debug-Overlay unten";
-        }catch(e){}
-      }
-      window.addEventListener("error", (ev)=>{
-        const msg = (ev && ev.error && ev.error.stack) ? ev.error.stack : (ev && ev.message ? ev.message : String(ev));
-        show("window.onerror:\n"+msg);
-      });
-      window.addEventListener("unhandledrejection", (ev)=>{
-        const msg = (ev && ev.reason && ev.reason.stack) ? ev.reason.stack : String(ev && ev.reason ? ev.reason : ev);
-        show("unhandledrejection:\n"+msg);
-      });
-    })();
-  </script>
+  <!-- Overlays (Menu / Game Over) are created by game.js (existing approach) -->
 
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
-  <script src="game.js?v=B025"></script>
+  <script src="game.js"></script>
 
   <script>
+    // Stable SW registration (no version query needed).
+    // This SW is designed so you can update game.js/assets without touching sw.js again.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
         try {
-          const reg = await navigator.serviceWorker.register("./sw.js?v=B025");
+          const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+
+          // Ask SW to activate immediately if waiting
           if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-          setInterval(() => { try { reg.update(); } catch(e) {} }, 60000);
-          navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
-        } catch(e) {}
+
+          // Proactively check for SW updates (rare; only when sw.js itself changes)
+          reg.update().catch(()=>{});
+
+          // If a new SW takes control, reload once
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          });
+
+          // Also poll update (harmless)
+          setInterval(() => { try { reg.update(); } catch(e){} }, 60000);
+        } catch (e) {
+          // If SW fails, the game still loads online.
+          console.warn("SW register failed", e);
+        }
       });
     }
   </script>
-
 </body>
 </html>
