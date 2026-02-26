@@ -1,5 +1,5 @@
-/* Hill-Climber Service Worker – B024 */
-const CACHE = "hillclimber-B024";
+/* Hill-Climber Service Worker – B025 */
+const CACHE = "hillclimber-B025";
 const CORE = ["./","./index.html","./style.css","./game.js","./manifest.json","./sw.js"];
 
 self.addEventListener("install", (event) => {
@@ -44,7 +44,7 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(req);
+    const cached = await cache.match(req); // respect querystring
     if (cached) return cached;
     try {
       const fresh = await fetch(req);
