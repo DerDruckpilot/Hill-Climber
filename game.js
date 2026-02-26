@@ -1,4 +1,14 @@
-/* Mini Hill Climb – BUILD B030-JROW
+
+// --- Tap helper (iOS-safe): pointerup + click fallback ---
+function bindTap(el, handler){
+  if(!el) return;
+  const fire = (ev)=>{ try{ handler(ev); } catch(e){ console.error(e); throw e; } };
+  // iOS: 'click' can be suppressed if touch events call preventDefault somewhere.
+  el.addEventListener("pointerup", fire, {passive:true});
+  el.addEventListener("touchend", fire, {passive:true});
+  el.addEventListener("click", fire);
+}
+/* Mini Hill Climb – BUILD B031-STARTFIX
    - Chassis + 2 wheels with constraints
    - Torso is render-only (no physics)
    - Head is sensor attached to chassis (very low wobble)
@@ -6,7 +16,7 @@
 (() => {
   "use strict";
 
-  const BUILD = "BUILD B030-JROW";
+  const BUILD = "BUILD B031-STARTFIX";
   const $ = (id) => document.getElementById(id);
 
   // DOM
