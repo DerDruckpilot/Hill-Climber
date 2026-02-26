@@ -1,165 +1,148 @@
-
-:root{
-  --bg:#0b0f1a;
-  --fg:#e9eefc;
-  --chip: rgba(255,255,255,0.10);
-  --chip2: rgba(0,0,0,0.25);
-  --panel: rgba(255,255,255,0.10);
-  --panel2: rgba(0,0,0,0.35);
+/* Mini Hill Climb – mobile first */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: radial-gradient(ellipse at 30% 20%, #151d33 0%, #0b1020 60%, #070a14 100%);
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
-*{
-  box-sizing:border-box;
+* {
+  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  user-select:none;
-  -webkit-user-select:none;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
-html,body{
-  margin:0;
-  height:100%;
-  background:var(--bg);
-  color:var(--fg);
-  overflow:hidden;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-}
-
-#c{
-  position:fixed;
-  inset:0;
-  width:100vw;
-  height:100vh;
-  touch-action:none;
-}
-
-#hud{
-  position:fixed;
-  top: calc(env(safe-area-inset-top) + 10px);
-  left: 10px;
-  right: 10px;
-  display:flex;
-  gap:8px;
-  align-items:center;
-  z-index:10;
-  pointer-events:none;
-}
-
-.chip{
-  padding:8px 10px;
-  border-radius:12px;
-  background:var(--chip);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 30px var(--chip2);
-  font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-}
-
-#controls{
-  position:fixed;
-  left:0;
-  right:0;
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
-  display:flex;
-  justify-content:space-between;
-  padding: 0 12px;
-  z-index:10;
-}
-
-#controls button{
-  width: 44vw;
-  max-width: 320px;
-  height: 70px;
-  border:0;
-  border-radius:18px;
-  background: rgba(255,255,255,0.12);
-  color: var(--fg);
-  font: 800 20px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-  touch-action:none;
-  user-select:none;
-  -webkit-user-select:none;
-}
-
-#controls button:active{
-  transform: scale(0.98);
-  background: rgba(255,255,255,0.18);
-}
-
-#brake{ text-align:left; padding-left:18px; }
-#gas{ text-align:right; padding-right:18px; }
-
-/* Build Badge */
-#build-badge {
+canvas#c {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 10px);
-  right: 10px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
-  color: #e9eefc;
-  font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  z-index: 9999;
-  opacity: 0.85;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  left: 16px;
+  top: 18px;
+  display: flex;
+  gap: 10px;
+  z-index: 20;
   pointer-events: none;
+  flex-wrap: wrap;
+  max-width: calc(100vw - 32px);
 }
 
-/* Overlays (Menu / GameOver) */
-.overlay{
-  position:fixed;
-  inset:0;
-  display:none;
-  align-items:center;
-  justify-content:center;
-  padding: 16px;
-  background: rgba(0,0,0,0.55);
-  backdrop-filter: blur(10px);
-  z-index: 2000;
-}
-
-.overlay.is-visible{ display:flex; }
-
-.panel{
-  width: min(520px, calc(100vw - 32px));
-  border-radius: 18px;
-  padding: 18px 16px;
-  background: var(--panel);
-  box-shadow: 0 20px 60px var(--panel2);
+.pill {
+  background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.12);
-  text-align:center;
-}
-
-.title{
-  font-weight: 900;
-  font-size: 28px;
-  letter-spacing: 0.3px;
-}
-
-.subtitle{
-  opacity: 0.85;
-  margin-top: 6px;
-  font-weight: 600;
-}
-
-.hint{
-  margin-top: 14px;
-  opacity: 0.7;
-  font-size: 13px;
-}
-
-button.primary{
-  margin-top: 16px;
-  width: 100%;
-  height: 54px;
-  border: 0;
+  color: rgba(255,255,255,0.90);
+  padding: 10px 14px;
   border-radius: 16px;
-  background: rgba(255,255,255,0.18);
-  color: var(--fg);
-  font-weight: 900;
-  font-size: 18px;
+  font: 600 16px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: 0.2px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pill.build {
+  margin-left: auto;
+}
+
+.controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 18px;
+  gap: 16px;
+  z-index: 30;
+}
+
+.ctrl {
+  width: min(44vw, 420px);
+  height: 92px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
+  font-size: 34px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  touch-action: none;
+}
+
+.ctrl:active, .primary:active {
+  transform: scale(0.99);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 18px;
+}
+
+.overlay.is-visible {
+  display: flex;
+}
+
+.panel {
+  width: min(720px, 92vw);
+  border-radius: 28px;
+  padding: 26px 24px 22px;
+  background: rgba(30,30,35,0.65);
+  border: 1px solid rgba(255,255,255,0.15);
   box-shadow: 0 10px 40px rgba(0,0,0,0.35);
 }
 
-button.primary:active{
-  transform: scale(0.99);
-  background: rgba(255,255,255,0.22);
+.title {
+  font: 800 44px/1.05 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: rgba(255,255,255,0.92);
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.subtitle {
+  font: 600 20px/1.25 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: rgba(255,255,255,0.78);
+  text-align: center;
+  margin: 0 0 18px;
+}
+
+.primary {
+  width: 100%;
+  height: 78px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.90);
+  font: 800 30px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  touch-action: manipulation;
+}
+
+.hint {
+  margin-top: 16px;
+  text-align: center;
+  color: rgba(255,255,255,0.60);
+  font: 600 18px/1.25 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.hint.small { font-size: 15px; opacity: 0.85; }
+
+@media (max-height: 720px) {
+  .ctrl { height: 82px; }
+  .title { font-size: 40px; }
+  .primary { height: 70px; font-size: 28px; }
 }
