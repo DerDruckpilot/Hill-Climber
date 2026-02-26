@@ -9,34 +9,30 @@
   <title>Mini Hill Climb</title>
 </head>
 <body>
-  <canvas id="c"></canvas>
+  <canvas id="c" width="800" height="600"></canvas>
 
-  <!-- HUD -->
   <div id="hud" class="hud">
     <div class="pill"><span id="speedText">0</span>&nbsp;km/h</div>
     <div class="pill">Fuel:&nbsp;<span id="fuelText">100</span>%</div>
     <div class="pill"><span id="distText">0</span>&nbsp;m</div>
-    <div class="pill build" id="buildText">HTML: BUILD B028 • JS: …</div>
+    <div class="pill build" id="buildText">BUILD B030-JROW</div>
   </div>
 
-  <!-- Touch controls -->
   <div id="controls" class="controls">
     <button id="btnBrake" class="ctrl" aria-label="Bremse/Rückwärts" type="button">⟲</button>
     <button id="btnGas" class="ctrl" aria-label="Gas" type="button">⟳</button>
   </div>
 
-  <!-- Main menu overlay -->
   <div id="menu" class="overlay is-visible" role="dialog" aria-modal="true" aria-label="Hauptmenü">
     <div class="panel">
       <div class="title">Mini Hill Climb</div>
       <div class="subtitle">Tippe auf Start</div>
       <button id="btnStart" class="primary" type="button">Start</button>
       <div class="hint">Gas: rechts · Rückwärts/Bremse: links · In der Luft kippen mit Gas/Bremse</div>
-      <div class="hint small">Debug: Wenn JS läuft, steht oben rechts bei „JS:“ eine Build-Nummer.</div>
+      <div class="hint small" id="statusText">Assets werden geladen…</div>
     </div>
   </div>
 
-  <!-- Game over overlay -->
   <div id="gameover" class="overlay" role="dialog" aria-modal="true" aria-label="Game Over">
     <div class="panel">
       <div class="title">Game Over</div>
@@ -45,46 +41,30 @@
     </div>
   </div>
 
+  <div id="fatal" class="overlay" role="dialog" aria-modal="true" aria-label="Fehler">
+    <div class="panel">
+      <div class="title">Fehler</div>
+      <div class="subtitle" id="fatalText">Unbekannter Fehler</div>
+      <button id="btnReload" class="primary" type="button">Neu laden</button>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
   <script>
-    // Global error to overlay (helps on iOS where console is hard)
-    window.__lastError = null;
     window.addEventListener("error", (e) => {
-      window.__lastError = (e && (e.message || e.error)) ? (e.message || String(e.error)) : "Unknown error";
       try {
-        const b = document.getElementById("buildText");
-        if (b) b.textContent = "HTML: BUILD B028 • JS: ERROR";
-        const menu = document.getElementById("menu");
-        const sub = menu && menu.querySelector(".subtitle");
-        if (sub) sub.textContent = "JS Fehler: " + window.__lastError;
-        if (menu) menu.classList.add("is-visible");
+        const msg = (e && (e.message || (e.error && e.error.message))) ? (e.message || e.error.message) : "Unknown error";
+        document.getElementById("fatalText").textContent = msg;
+        document.getElementById("fatal").classList.add("is-visible");
       } catch(_) {}
     });
-  </script>
-  <script src="game.js"></script>
-
-  <script>
-    // Stable SW registration (no version query needed).
+    document.getElementById("btnReload").addEventListener("click", () => location.reload());
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", async () => {
-        try {
-          const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
-          if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-          reg.update().catch(()=>{});
-
-          let reloaded = false;
-          navigator.serviceWorker.addEventListener("controllerchange", () => {
-            if (reloaded) return;
-            reloaded = true;
-            window.location.reload();
-          });
-
-          setInterval(() => { try { reg.update(); } catch(e){} }, 60000);
-        } catch (e) {
-          console.warn("SW register failed", e);
-        }
+        try { await navigator.serviceWorker.register("./sw.js", { scope: "./" }); } catch (e) {}
       });
     }
   </script>
+  <script src="game.js"></script>
 </body>
 </html>
